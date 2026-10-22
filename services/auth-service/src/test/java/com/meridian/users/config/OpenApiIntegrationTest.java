@@ -42,6 +42,30 @@ class OpenApiIntegrationTest {
     }
 
     @Test
+    @DisplayName("OpenAPI documenta el registro con perfil público y token de acceso")
+    void documentaRegistroConAuthResponse() throws Exception {
+        String responsesPath = "$.paths['/api/v1/users'].post.responses";
+        String createdContentPath = responsesPath + "['201'].content['application/json']";
+
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(createdContentPath + ".schema['$ref']")
+                        .value("#/components/schemas/AuthResponse"))
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.user.id").isNotEmpty())
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.user.email").isNotEmpty())
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.token").isNotEmpty())
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.user['$ref']")
+                        .value("#/components/schemas/UserResponse"))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.token.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.passwordHash").doesNotExist())
+                .andExpect(jsonPath(responsesPath + "['400'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath(responsesPath + "['409'].content['application/json'].schema['$ref']")
+                        .value("#/components/schemas/ErrorResponse"))
+                .andExpect(jsonPath("$.paths['/api/v1/auth/register']").doesNotExist());
+    }
+
+    @Test
     @DisplayName("Swagger UI está disponible desde la ruta configurada")
     void publicaSwaggerUi() throws Exception {
         mockMvc.perform(get("/swagger-ui.html"))
