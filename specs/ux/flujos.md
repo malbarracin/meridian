@@ -1,8 +1,8 @@
 ---
 title: Meridian — Flujos de usuario
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca781719e02e27161a87aaf
-updated: 2026-10-22T12:22:26.569Z
+updated: 2026-10-22T12:24:09.349Z
 ---
 
 # Meridian — Flujos de usuario

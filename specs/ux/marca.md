@@ -1,8 +1,8 @@
 ---
 title: Meridian — Marca y restricciones de contenido
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca781719e02e27161a87aaf
-updated: 2026-10-22T12:22:26.471Z
+updated: 2026-10-22T12:24:09.362Z
 ---
 
 # Meridian — Marca y restricciones de contenido
