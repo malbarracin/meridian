@@ -104,6 +104,60 @@ class FinnhubAdapterTest {
     }
 
     @Test
+    @DisplayName("Con clave pide velas diarias de los tres tickers en la ventana de siete días")
+    void consultaVelasPorDefectoConClave() throws InterruptedException {
+        for (int i = 0; i < 3; i++) {
+            server.enqueue(json("""
+                    {"s":"ok","t":[1792627200],"o":[10],"h":[12],"l":[9],"c":[11],"v":[1000]}
+                    """));
+        }
+
+        var series = adapter("test-key", false).fetchCandles();
+
+        assertThat(series).extracting(candle -> candle.ticker()).containsExactly("AAPL", "MSFT", "SPY");
+        assertThat(series).allSatisfy(candle -> {
+            assertThat(candle.ohlcPoints()).hasSize(1);
+            assertThat(candle.ohlcPoints().getFirst().c()).isEqualByComparingTo("11");
+        });
+        for (String ticker : new String[]{"AAPL", "MSFT", "SPY"}) {
+            var request = server.takeRequest(1, TimeUnit.SECONDS);
+            assertThat(request).isNotNull();
+            assertThat(request.getMethod()).isEqualTo("GET");
+            assertThat(request.getPath()).startsWith(
+                    "/api/v1/stock/candle?symbol=" + ticker + "&resolution=D&from=");
+            assertThat(request.getPath()).contains("&to=");
+            assertThat(request.getPath()).endsWith("&token=test-key");
+        }
+    }
+
+    @Test
+    @DisplayName("Con clave pide la serie de un ticker en la ventana de siete días")
+    void consultaVelasDeUnTickerConClave() throws InterruptedException {
+        server.enqueue(json("""
+                {"s":"ok","t":[1792627200],"o":[175],"h":[180],"l":[170],"c":[178],"v":[5000]}
+                """));
+
+        var series = adapter("test-key", false).fetchCandles("MSFT");
+
+        assertThat(series.ticker()).isEqualTo("MSFT");
+        assertThat(series.ohlcPoints()).hasSize(1);
+        assertThat(series.ohlcPoints().getFirst().o()).isEqualByComparingTo("175");
+        var request = server.takeRequest(1, TimeUnit.SECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getPath()).startsWith(
+                "/api/v1/stock/candle?symbol=MSFT&resolution=D&from=");
+        assertThat(request.getPath()).endsWith("&token=test-key");
+    }
+
+    @Test
+    @DisplayName("Rechaza rango con from negativo sin HTTP")
+    void rechazaFromNegativo() {
+        assertThatThrownBy(() -> adapter("key", false).fetchCandles("AAPL", -1, 100))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(server.getRequestCount()).isZero();
+    }
+
+    @Test
     @DisplayName("Sin operaciones devuelve series vacías para los tres tickers")
     void aceptaNoData() {
         server.enqueue(json("{\"s\":\"no_data\"}"));
