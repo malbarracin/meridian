@@ -65,7 +65,15 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 - Layout: columna portrait 390×844 · form-card fill con padding 20 · CTA, campos, password-toggle y register-link ≥ 44 de alto (áreas táctiles)
 
 ##### Dashboard — web
-- Tablero: (pendiente TASK-6 / TASK-8)
+- Tablero: Dashboard / web · https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4
+- Estados: default [Dashboard / web](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · cargando [Dashboard / web / cargando](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · error parcial [Dashboard / web / error parcial](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · error total [Dashboard / web / error total](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4)
+- Componentes: MERIDIAN wordmark · Button secondary (Salir) · MetricCard (Dólar oficial, Dólar blue, BTC, ETH) · ChartPanel (Bolsa, Cripto) · NewsCard ×3 · Skeleton metric/chart/news (cargando) · ChartPanel error (error parcial) · ErrorScreen (error total)
+- Microcopy: título "Pulso de mercados" · fecha "Jueves 22 de octubre de 2026" · usuario "Ana García" · CTA "Salir" · sección "Noticias IA y tecnología" · NewsCard CTA "Abrir" · error parcial "Bolsa no está disponible en este momento." + "Reintentar" · error total "No pudimos cargar los mercados." / "Verificá tu conexión y volvé a intentar." / "Reintentar"
+- Datos: Dólar oficial/blue (precio, variación, timestamp) · BTC/ETH (precio USD, variación 24h) · S&P Merval (valor, variación, chart 7d, resumen) · Cripto BTC/ETH (chart 7d, resumen) · noticias IA/Tech (título, fuente, fecha, resumen, url vía Abrir) ← APIs públicas vía backend adapter
+- Assets: wordmark MERIDIAN (componente) · export SVG/PNG · gráficos como parte de ChartPanel (no assets sueltos)
+- Motion: NewsCard entrada fade + translateY corto · `motion.base` 250 ms · stagger 100 ms entre cards · reduced-motion: sin translate/stagger, solo opacidad o sin animación
+- Marca: MERIDIAN en header; sin Soma / SOMA / Ops Deck; sin KPIs operativos (usuarios activos / sesiones / errores)
+- Layout: web 1440 · Header + Hero + Fila superior (4 MetricCards) + Fila media (2 ChartPanels) + Fila inferior (grid 3 NewsCards)
 
 ##### Dashboard — mobile
 - Tablero: (pendiente TASK-7 / TASK-8)
