@@ -6,6 +6,7 @@ import java.util.Locale;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
@@ -24,14 +25,15 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserMapper userMapper;
+    private final JwtService jwtService;
 
     /**
      * Registra un usuario con email normalizado y contraseña hasheada.
      * @param request datos validados del registro
-     * @return datos públicos del usuario persistido
+     * @return datos públicos del usuario persistido y JWT de acceso
      * @throws DuplicateUserException si el email normalizado ya existe
      */
-    public UserResponse register(RegisterRequest request) {
+    public AuthResponse register(RegisterRequest request) {
         String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
         if (userRepository.findByEmail(normalizedEmail).isPresent()) {
             throw new DuplicateUserException();
@@ -46,7 +48,9 @@ public class UserService {
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         User savedUser = userRepository.save(user);
-        return userMapper.toResponse(savedUser);
+        UserResponse response = userMapper.toResponse(savedUser);
+        String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
+        return new AuthResponse(response, token);
     }
 
     /**

@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
@@ -42,6 +43,9 @@ class UserServiceTest {
     @Mock
     private UserMapper userMapper;
 
+    @Mock
+    private JwtService jwtService;
+
     @InjectMocks
     private UserService userService;
 
@@ -52,11 +56,13 @@ class UserServiceTest {
         when(passwordEncoder.encode(REQUEST.password())).thenReturn(PASSWORD_HASH);
         User persistedUser = new User();
         persistedUser.setId("user-1");
+        persistedUser.setEmail("ada@example.com");
         when(userRepository.save(any(User.class))).thenReturn(persistedUser);
         UserResponse expected = new UserResponse("user-1", "Ada", "ada@example.com", Instant.now());
         when(userMapper.toResponse(persistedUser)).thenReturn(expected);
+        when(jwtService.generateToken("user-1", "ada@example.com")).thenReturn("signed-token");
 
-        UserResponse response = userService.register(REQUEST);
+        AuthResponse response = userService.register(REQUEST);
 
         ArgumentCaptor<User> capturedUser = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(capturedUser.capture());
@@ -66,7 +72,9 @@ class UserServiceTest {
         assertThat(capturedUser.getValue().getEmail()).isEqualTo("ada@example.com");
         assertThat(capturedUser.getValue().getPasswordHash()).isEqualTo(PASSWORD_HASH)
                 .isNotEqualTo(REQUEST.password());
-        assertThat(response).isSameAs(expected);
+        verify(jwtService).generateToken("user-1", "ada@example.com");
+        assertThat(response.user()).isSameAs(expected);
+        assertThat(response.token()).isEqualTo("signed-token").isNotBlank();
     }
 
     @Test
@@ -76,7 +84,7 @@ class UserServiceTest {
 
         assertThatThrownBy(() -> userService.register(REQUEST)).isInstanceOf(DuplicateUserException.class);
 
-        verifyNoInteractions(passwordEncoder, userMapper);
+        verifyNoInteractions(passwordEncoder, userMapper, jwtService);
         verify(userRepository, never()).save(any(User.class));
     }
 }
