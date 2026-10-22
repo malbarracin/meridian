@@ -86,7 +86,8 @@ class ErrorContractHttpTest {
     @DisplayName("ErrorCode expone los códigos del contrato")
     void exponeCodigosDelContrato() {
         assertThat(ErrorCode.values()).extracting(Enum::name)
-                .containsExactly("VALIDATION_ERROR", "BAD_REQUEST", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR");
+                .containsExactly("VALIDATION_ERROR", "BAD_REQUEST", "NOT_FOUND", "CONFLICT", "UNAUTHORIZED",
+                        "INTERNAL_ERROR");
     }
 
     @RestController
