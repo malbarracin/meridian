@@ -106,4 +106,19 @@ class JwtConfigTest {
     @EnableConfigurationProperties(JwtConfig.class)
     static class JwtPropertiesConfiguration {
     }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0L, -1L})
+    @DisplayName("Falla el arranque cuando jwt.expiration-ms no es positivo")
+     void fallaArranqueConExpiracionNoPositiva(long expirationMs) {
+        contextRunner
+                .withPropertyValues(
+                        "jwt.secret=" + TEST_SECRET,
+                        "jwt.expiration-ms=" + expirationMs)
+                .run(context -> {
+                        assertThat(context).hasFailed();
+                        assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class);
+                        assertThat(context.getStartupFailure()).hasStackTraceContaining("expiration-ms");
+                });
+        }
 }

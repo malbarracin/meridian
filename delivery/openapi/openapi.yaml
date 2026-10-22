@@ -9,6 +9,8 @@ servers:
 - url: http://localhost:8080
   description: Entorno local
 tags:
+- name: Autenticación
+  description: Obtención de tokens de acceso
 - name: Usuarios
   description: Registro y consulta de los datos públicos de usuarios
 paths:
@@ -82,6 +84,57 @@ paths:
               examples:
                 Error interno:
                   $ref: "#/components/examples/InternalError"
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Autenticación
+      summary: Iniciar sesión
+      description: Normaliza el email y verifica la contraseña con BCrypt. Devuelve
+        un JWT y los datos públicos del usuario. Las credenciales incorrectas reciben
+        el mismo error tanto si el email no existe como si la contraseña es incorrecta.
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          description: Credenciales válidas y JWT emitido
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Datos inválidos o JSON mal formado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                Validación:
+                  $ref: "#/components/examples/ValidationError"
+                JSON inválido:
+                  $ref: "#/components/examples/BadRequest"
+        "401":
+          description: Email o contraseña incorrectos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: UNAUTHORIZED
+                message: Credenciales inválidas
+                details: []
+                timestamp: 2026-10-22T10:00:00Z
+        "500":
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example: null
   /api/v1/users/{id}:
     get:
       tags:
@@ -131,6 +184,62 @@ paths:
               examples:
                 Error interno:
                   $ref: "#/components/examples/InternalError"
+  /api/v1/users/me:
+    get:
+      tags:
+      - Usuarios
+      summary: Consultar mi perfil
+      description: "Lee el perfil persistido usando el subject del JWT firmado y vigente\
+        \ del header Authorization: Bearer <token>. No expone la contraseña ni su\
+        \ hash."
+      operationId: getMe
+      parameters:
+      - name: Authorization
+        in: header
+        description: JWT de acceso con prefijo Bearer
+        required: false
+        schema:
+          type: string
+        example: Bearer eyJhbGciOiJIUzI1NiJ9...
+      responses:
+        "200":
+          description: Perfil del usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+              example:
+                id: 6710f3a2c9e77c0012345678
+                name: Ana Pérez
+                email: ana.perez@example.com
+                createdAt: 2026-10-22T10:00:00Z
+        "401":
+          description: "JWT ausente, inválido o expirado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                code: UNAUTHORIZED
+                message: Credenciales inválidas
+                details: []
+                timestamp: 2026-10-22T10:05:00Z
+        "404":
+          description: Usuario no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example: null
+        "500":
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example: null
+      security:
+      - bearerAuth: []
 components:
   schemas:
     RegisterRequest:
@@ -247,6 +356,25 @@ components:
       required:
       - field
       - message
+    LoginRequest:
+      type: object
+      description: Credenciales para obtener un JWT de acceso.
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email del usuario.
+          example: ana@example.com
+          minLength: 1
+        password:
+          type: string
+          description: Contraseña del usuario.
+          example: password123
+          minLength: 1
+          writeOnly: true
+      required:
+      - email
+      - password
   examples:
     ValidationError:
       summary: Datos inválidos
@@ -285,3 +413,8 @@ components:
         message: Error interno
         details: []
         timestamp: 2026-10-22T10:05:00Z
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

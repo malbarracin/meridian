@@ -19,8 +19,10 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
 import com.meridian.users.config.JwtConfig;
+import com.meridian.users.user.exception.InvalidCredentialsException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class JwtServiceTest {
 
@@ -108,5 +110,50 @@ class JwtServiceTest {
     @DisplayName("Rechaza tokens nulos, vacios o mal formados")
     void rechazaTokenMalFormado(String token) {
         assertThat(jwtService.isValid(token)).isFalse();
+    }
+
+    @Test
+    @DisplayName("extractUserId devuelve el subject de un JWT vigente sin consultar la base")
+    void extractUserIdDevuelveSubjectDeTokenValido() {
+        String token = jwtService.generateToken(USER_ID, EMAIL);
+
+        assertThat(jwtService.extractUserId(token)).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("extractUserId rechaza un JWT expirado con InvalidCredentialsException")
+    void extractUserIdRechazaTokenExpirado() {
+        String token = Jwts.builder()
+                .subject(USER_ID)
+                .expiration(Date.from(Instant.now().minusSeconds(60)))
+                .signWith(KEY, Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> jwtService.extractUserId(token))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Credenciales inválidas");
+    }
+
+    @Test
+    @DisplayName("extractUserId rechaza firma ajena o subject ausente con InvalidCredentialsException")
+    void extractUserIdRechazaFirmaAjenaOSubjectAusente() {
+        SecretKey otherKey = Jwts.SIG.HS256.key().build();
+        String foreignToken = Jwts.builder()
+                .subject(USER_ID)
+                .expiration(Date.from(Instant.now().plusMillis(EXPIRATION_MS)))
+                .signWith(otherKey, Jwts.SIG.HS256)
+                .compact();
+        String blankSubject = Jwts.builder()
+                .subject(" ")
+                .expiration(Date.from(Instant.now().plusMillis(EXPIRATION_MS)))
+                .signWith(KEY, Jwts.SIG.HS256)
+                .compact();
+
+        assertThatThrownBy(() -> jwtService.extractUserId(foreignToken))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> jwtService.extractUserId(blankSubject))
+                .isInstanceOf(InvalidCredentialsException.class);
+        assertThatThrownBy(() -> jwtService.extractUserId("not-a-jwt"))
+                .isInstanceOf(InvalidCredentialsException.class);
     }
 }

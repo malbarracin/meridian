@@ -1,0 +1,29 @@
+meta {
+  name: Consultar mi perfil
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{authToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isString
+  res.body.createdAt: isString
+}
+
+docs {
+  Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash.
+
+  Respuestas: 200 perfil, 401 JWT ausente, inválido o vencido, 404 usuario eliminado, 500 error interno.
+
+  Requiere haber ejecutado el alta o el login para tener authToken.
+}

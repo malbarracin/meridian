@@ -47,6 +47,12 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST, "Solicitud inválida", List.of());
     }
 
+    /** Rechaza credenciales inválidas con el contrato de error compartido. */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException exception) {
+        return build(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
     /** Informa de la ausencia de un recurso. */
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException exception) {

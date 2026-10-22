@@ -14,10 +14,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.meridian.users.user.dto.AuthResponse;
+import com.meridian.users.user.dto.LoginRequest;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
 import com.meridian.users.user.exception.DuplicateUserException;
+import com.meridian.users.user.exception.InvalidCredentialsException;
+import com.meridian.users.user.exception.UserNotFoundException;
 import com.meridian.users.user.mapper.UserMapper;
 import com.meridian.users.user.repository.UserRepository;
 
@@ -96,5 +99,99 @@ class UserServiceTest {
 
         verifyNoInteractions(passwordEncoder, userMapper, jwtService);
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Login normaliza el email, verifica BCrypt y emite AuthResponse con JWT")
+    void loginDevuelveAuthResponseCuandoLasCredencialesSonValidas() {
+        LoginRequest request = new LoginRequest("  ADA@EXAMPLE.COM  ", "password123");
+        User user = new User();
+        user.setId("user-1");
+        user.setEmail("ada@example.com");
+        user.setPasswordHash(PASSWORD_HASH);
+        UserResponse expected = new UserResponse("user-1", "Ada", "ada@example.com", Instant.now());
+        when(userRepository.findByEmail("ada@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("password123", PASSWORD_HASH)).thenReturn(true);
+        when(userMapper.toResponse(user)).thenReturn(expected);
+        when(jwtService.generateToken("user-1", "ada@example.com")).thenReturn(JWT_TOKEN);
+
+        AuthResponse response = userService.login(request);
+
+        verify(userRepository).findByEmail("ada@example.com");
+        verify(passwordEncoder).matches("password123", PASSWORD_HASH);
+        verify(jwtService).generateToken("user-1", "ada@example.com");
+        verify(userRepository, never()).save(any(User.class));
+        assertThat(response.user()).isSameAs(expected);
+        assertThat(response.token()).isEqualTo(JWT_TOKEN);
+    }
+
+    @Test
+    @DisplayName("Login con email inexistente lanza InvalidCredentialsException sin verificar hash")
+    void loginRechazaEmailInexistente() {
+        when(userRepository.findByEmail("ada@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.login(new LoginRequest("ada@example.com", "password123")))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Credenciales inválidas");
+
+        verifyNoInteractions(passwordEncoder, userMapper, jwtService);
+    }
+
+    @Test
+    @DisplayName("Login con contraseña incorrecta lanza InvalidCredentialsException sin emitir JWT")
+    void loginRechazaPasswordIncorrecta() {
+        User user = new User();
+        user.setPasswordHash(PASSWORD_HASH);
+        when(userRepository.findByEmail("ada@example.com")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("incorrecta", PASSWORD_HASH)).thenReturn(false);
+
+        assertThatThrownBy(() -> userService.login(new LoginRequest("ada@example.com", "incorrecta")))
+                .isInstanceOf(InvalidCredentialsException.class)
+                .hasMessage("Credenciales inválidas");
+
+        verifyNoInteractions(userMapper, jwtService);
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("getByToken extrae el subject del JWT y devuelve el UserResponse mapeado")
+    void getByTokenDevuelvePerfilDelSubject() {
+        User user = new User();
+        user.setId("user-1");
+        UserResponse expected = new UserResponse("user-1", "Ada", "ada@example.com", Instant.now());
+        when(jwtService.extractUserId(JWT_TOKEN)).thenReturn("user-1");
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(userMapper.toResponse(user)).thenReturn(expected);
+
+        UserResponse response = userService.getByToken(JWT_TOKEN);
+
+        verify(jwtService).extractUserId(JWT_TOKEN);
+        verify(userRepository).findById("user-1");
+        verify(userMapper).toResponse(user);
+        assertThat(response).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("getByToken propaga InvalidCredentialsException si el JWT es inválido sin tocar la base")
+    void getByTokenPropagaJwtInvalido() {
+        when(jwtService.extractUserId(JWT_TOKEN)).thenThrow(new InvalidCredentialsException());
+
+        assertThatThrownBy(() -> userService.getByToken(JWT_TOKEN))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        verifyNoInteractions(userRepository, userMapper);
+    }
+
+    @Test
+    @DisplayName("getByToken lanza UserNotFoundException si el subject no existe en la base")
+    void getByTokenLanzaNotFoundSiElUsuarioNoExiste() {
+        when(jwtService.extractUserId(JWT_TOKEN)).thenReturn("user-1");
+        when(userRepository.findById("user-1")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getByToken(JWT_TOKEN))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessageContaining("user-1");
+
+        verifyNoInteractions(userMapper);
     }
 }
