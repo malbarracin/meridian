@@ -49,7 +49,7 @@ class UserControllerTest {
     private UserService userService;
 
     @Test
-    @DisplayName("El registro devuelve 201 y solo datos públicos")
+    @DisplayName("POST /api/v1/users devuelve 201 con AuthResponse (user + token) sin passwordHash")
     void registraUsuarioSinExponerContrasena() throws Exception {
         when(userService.register(REQUEST)).thenReturn(new AuthResponse(RESPONSE, "signed-token"));
 
@@ -58,6 +58,7 @@ class UserControllerTest {
                 .andExpect(header().string("Location", "http://localhost" + USERS_PATH + "/" + USER_ID))
                 .andExpect(jsonPath("$", aMapWithSize(2)))
                 .andExpect(jsonPath("$.token").value("signed-token"))
+                .andExpect(jsonPath("$.token").isNotEmpty())
                 .andExpect(jsonPath("$.user", aMapWithSize(4)))
                 .andExpect(jsonPath("$.user.id").value(USER_ID))
                 .andExpect(jsonPath("$.user.name").value("Ana"))
@@ -95,6 +96,21 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").isString())
                 .andExpect(jsonPath("$.details[0].field").value("email"))
+                .andExpect(jsonPath("$.timestamp").isString());
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("Una contraseña corta devuelve 400 VALIDATION_ERROR sin invocar el servicio")
+    void rechazaPasswordCorta() throws Exception {
+        mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content("""
+                {"name":"Ana","email":"ana@example.com","password":"short"}
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$", aMapWithSize(4)))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("password"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
                 .andExpect(jsonPath("$.timestamp").isString());
         verifyNoInteractions(userService);
     }
