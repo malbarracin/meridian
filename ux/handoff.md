@@ -54,7 +54,15 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 - Marca: MERIDIAN en layers; sin Soma / SOMA / Ops Deck
 
 ##### Login — mobile
-- Tablero: (pendiente TASK-5)
+- Tablero: Login / mobile · https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f
+- Estados: default [Login / mobile](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · cargando [Login / mobile / loading](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · error inline [Login / mobile / error](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · error general [Login / mobile / error general](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · sesión expirada [Login / mobile / sesion expirada](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f)
+- Componentes: MERIDIAN wordmark · Input (default, disabled, error) · Button primary (default, loading) · ErrorBanner · password-toggle (texto "Mostrar")
+- Microcopy: título "Iniciar sesión" · CTA "Ingresar" · link "¿No tenés cuenta? Registrate" · toggle "Mostrar" · loading "Cargando…" · errores "Ingresá un email válido" · "Email o contraseña incorrectos" · "Algo salió mal. Intentá de nuevo." · "Tu sesión expiró. Volvé a ingresar."
+- Datos: email, contraseña (formulario de login; sin datos de API)
+- Assets: wordmark MERIDIAN (componente) · export SVG/PNG
+- Motion: CTA loading (spinner) · `motion.fast` 150 ms en hover/focus de Input y Button · reduced-motion: sin spinner animado (estado estático "Cargando…") o solo opacidad
+- Marca: MERIDIAN en layers; sin Soma / SOMA / Ops Deck
+- Layout: columna portrait 390×844 · form-card fill con padding 20 · CTA y campos ≥ 44 de alto
 
 ##### Dashboard — web
 - Tablero: (pendiente TASK-6 / TASK-8)
