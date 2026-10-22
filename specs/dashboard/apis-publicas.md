@@ -1,8 +1,8 @@
 ---
 title: Dashboard — Catálogo de APIs públicas (H8)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ac75bb08ca781f5b410e46a6ec7143d
-updated: 2026-10-22T23:06:59.215Z
+updated: 2026-10-22T23:08:00.164Z
 ---
 
 # Dashboard — Catálogo de APIs públicas (H8)
