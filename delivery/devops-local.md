@@ -59,8 +59,10 @@ Set-Location ../..
 ```
 
 Dev y docker crean índices automáticamente. Prod mantiene auto-index-creation desactivado.
-Antes de habilitar tráfico en producción, un operador debe crear el índice único con las
-variables de conexión del entorno y permisos de administración de índices:
+En prod, `UserIndexConfig` crea o confirma el índice único de email durante la inicialización
+del contexto, antes de completar el arranque. La credencial de la aplicación necesita permisos
+para crear índices. Si existen duplicados, un índice incompatible o faltan permisos, el arranque
+falla y la instancia no queda lista para tráfico. El comando manual equivalente es:
 
 ```powershell
 mongosh $env:MONGO_URI --quiet --eval 'db.getSiblingDB(process.env.MONGO_DATABASE).users.createIndex({email: 1}, {unique: true})'
@@ -105,7 +107,8 @@ kubectl port-forward service/auth-auth-service 8080:8080 -n dev
 El chart usa perfil prod por defecto, ClusterIP, usuario no-root y probes startup/readiness/
 liveness en `/actuator/health`. Requests/limits figuran en values y pueden ajustarse según carga.
 Para producción, usar values-prod, fijar `image.repository` y `image.tag` a una imagen publicada,
-crear el índice y aprovisionar el Secret antes del despliegue. No se realizó deploy real.
+aprovisionar el Secret con permisos de creación de índices antes del despliegue.
+El servicio garantiza el índice durante el arranque. No se realizó deploy real.
 
 ## Verificación realizada
 

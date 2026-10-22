@@ -2,7 +2,6 @@ package com.meridian.users.user.controller;
 
 import jakarta.validation.Valid;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.meridian.users.exception.ErrorResponse;
 import com.meridian.users.user.dto.RegisterRequest;
@@ -88,7 +88,9 @@ public class UserController {
                                     ref = "#/components/examples/InternalError")))
     })
     public ResponseEntity<UserResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(userService.register(request));
+        UserResponse response = userService.register(request);
+        return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}").buildAndExpand(response.id()).toUri()).body(response);
     }
 
     /**

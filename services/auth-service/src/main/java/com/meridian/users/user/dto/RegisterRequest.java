@@ -32,6 +32,13 @@ public record RegisterRequest(
                 requiredMode = Schema.RequiredMode.REQUIRED)
         @NotBlank @Size(min = 8) String password) {
 
+    /** Recorta el email antes de que Bean Validation evalúe el registro. */
+    public RegisterRequest {
+        if (email != null) {
+            email = email.trim();
+        }
+    }
+
     @Override
     public String toString() {
         return "RegisterRequest[datos protegidos]";

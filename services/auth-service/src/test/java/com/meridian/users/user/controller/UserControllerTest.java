@@ -4,6 +4,8 @@ import java.time.Instant;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.http.MediaType;
@@ -24,6 +26,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(UserController.class)
@@ -51,6 +54,7 @@ class UserControllerTest {
 
         mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "http://localhost" + USERS_PATH + "/" + USER_ID))
                 .andExpect(jsonPath("$", aMapWithSize(4)))
                 .andExpect(jsonPath("$.id").value(USER_ID))
                 .andExpect(jsonPath("$.name").value("Ana"))
@@ -58,6 +62,20 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.createdAt").value("2026-10-22T10:00:00Z"))
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
+        verify(userService).register(REQUEST);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {" ana@example.com", "ana@example.com ", "  ana@example.com  "})
+    @DisplayName("El registro acepta espacios alrededor del email antes de validarlo")
+    void aceptaEmailConEspacios(String email) throws Exception {
+        when(userService.register(REQUEST)).thenReturn(RESPONSE);
+
+        mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content("""
+                {"name":"Ana","email":"%s","password":"password123"}
+                """.formatted(email)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value("ana@example.com"));
         verify(userService).register(REQUEST);
     }
 
