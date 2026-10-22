@@ -83,4 +83,15 @@ public class UserService {
                 .map(userMapper::toResponse)
                 .orElseThrow(() -> new UserNotFoundException(id));
     }
+
+    /**
+     * Consulta el perfil persistido identificado por un JWT de acceso.
+     * @param token JWT recibido sin el prefijo Bearer
+     * @return perfil público actual del usuario
+     * @throws InvalidCredentialsException si el JWT no es válido
+     * @throws UserNotFoundException si el usuario ya no existe
+     */
+    public UserResponse getByToken(String token) {
+        return getById(jwtService.extractUserId(token));
+    }
 }
