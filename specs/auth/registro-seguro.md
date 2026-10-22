@@ -1,8 +1,8 @@
 ---
 title: Auth — Registro seguro + hashing (H2.2)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/H2-2-Registro-seguro-hashing-3ac75bb08ca781c3bd97d9b6197ae54c
-updated: 2026-10-22T16:13:41.477Z
+updated: 2026-10-22T16:14:52.375Z
 ---
 
 # Auth — Registro seguro + hashing
