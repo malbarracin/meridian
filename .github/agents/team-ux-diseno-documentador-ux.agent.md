@@ -1,5 +1,5 @@
 ---
-name: team-documentador-ux
+name: team-ux-diseno-documentador-ux
 description: Deja ux/handoff.md y ux/design-system.md listos para web y mobile
 ---
 

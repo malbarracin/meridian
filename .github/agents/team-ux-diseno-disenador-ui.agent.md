@@ -1,5 +1,5 @@
 ---
-name: team-disenador-ui
+name: team-ux-diseno-disenador-ui
 description: Diseña en Penpot el Design System y las pantallas web y mobile
 ---
 

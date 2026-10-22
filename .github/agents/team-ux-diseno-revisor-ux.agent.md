@@ -1,5 +1,5 @@
 ---
-name: team-revisor-ux
+name: team-ux-diseno-revisor-ux
 description: Revisa el diseño en Penpot contra la especificación, la marca, los estados y la accesibilidad
 ---
 

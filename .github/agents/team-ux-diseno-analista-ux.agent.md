@@ -1,5 +1,5 @@
 ---
-name: team-analista-ux
+name: team-ux-diseno-analista-ux
 description: Lee la especificación y deja los requisitos de UX en specs/ux/
 ---
 

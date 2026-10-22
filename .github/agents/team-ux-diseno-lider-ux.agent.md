@@ -1,5 +1,5 @@
 ---
-name: team-lider-ux
+name: team-ux-diseno-lider-ux
 description: Parte el diseño en tareas con criterios de aceptación
 ---
 
