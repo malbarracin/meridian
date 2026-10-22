@@ -96,14 +96,14 @@ Familia: **Host Grotesk**.
 
 - **default**: estado en reposo.
 - **hover**: borde o fondo acentuado con `color.primary` / `color.primary-hover`; transición `motion.fast`.
-- **focus** (Button, Input): stroke 2 con `color.focus` (foco visible, no solo color de relleno).
+- **focus** (Button, Input): stroke 2 con `color.focus`. Button **primary/focus** usa stroke **outer** (el anillo se ve contra el fondo de página; inner sobre el mismo fill era invisible). Button **secondary/focus** e Input usan stroke inner contrastando con el fill.
 - **loading**: spinner + label “Cargando…” / “Validando…” o skeleton con forma del contenido.
-- **error**: mensaje textual + acción “Reintentar” cuando aplica; Input muestra error inline bajo el campo.
+- **error**: mensaje textual + acción “Reintentar” (board ≥ 44×44) cuando aplica; Input muestra error inline bajo el campo.
 - **reduced-motion**: mismo layout en reposo; en runtime sin desplazamiento (NewsCard: sin stagger/slide; solo fade o nada). MetricCard/ChartPanel no animan entrada.
 
 ### Accesibilidad
 
 - Contraste AA: texto `#0F1C1A` / `#5A6B68` sobre `#FFFFFF`/`#F2F5F4`; CTA blanco sobre `#0D7377`.
-- Objetivos táctiles: Button e Input altura 44.
+- Objetivos táctiles ≥ 44×44: Button, Input, NewsCard CTA “Abrir”, ErrorBanner “Reintentar”, y “Reintentar” en MetricCard / ChartPanel / NewsCard (estado error).
 - Variación de mercado: signo/flecha ▲▼ además del color.
 - Gráficos (ChartPanel): título, valor, variación y resumen en texto.
