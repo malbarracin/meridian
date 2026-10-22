@@ -117,11 +117,11 @@ No hace falta instalar `mongosh` en la máquina: si se quiere usar desde el host
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
 docker compose logs --tail 100 auth-service
-docker compose exec auth-service printenv | Select-String 'MONGO_'
 ```
 
-`printenv` confirma qué URI y base recibió la app; nunca imprimir `JWT_SECRET` ni pegar la salida
-completa en un ticket. La app lee `MONGO_URI` y `MONGO_DATABASE`; dentro de Compose el host de MongoDB
+Comprobar en privado que `.env` contiene las variables obligatorias con `docker compose config --quiet`.
+No volcar el entorno del contenedor: `MONGO_URI` incluye usuario y contraseña, y `JWT_SECRET` es secreto.
+La app lee `MONGO_URI` y `MONGO_DATABASE`; dentro de Compose el host de MongoDB
 es `mongodb`, mientras que desde la máquina anfitriona es `localhost`.
 
 ### Persistencia del volumen
@@ -181,7 +181,7 @@ curl -s http://localhost:8080/actuator/health
 |---|---|---|
 | `required variable MONGO_USER is missing a value: Set MONGO_USER in .env` al ejecutar cualquier comando de Compose | Falta `.env`, está incompleto, o se ejecuta desde otra carpeta | Crear `.env` desde `.env.example`, completar `MONGO_USER`, `MONGO_PASSWORD` y `JWT_SECRET` y ejecutar desde `services/auth-service` |
 | MongoDB queda `unhealthy` y el health log muestra `MongoServerError: Authentication failed.` | El volumen ya existía inicializado con otras credenciales; `MONGO_INITDB_ROOT_*` solo se aplica al crear el volumen | Para una demo descartable, `docker compose down --volumes` y volver a levantar; para conservar datos, crear/rotar el usuario con `mongosh` autenticado como administrador |
-| Auth falla al conectar con `Authentication failed` mientras MongoDB está healthy | `MONGO_URI`/`MONGO_DATABASE` del contenedor no coinciden con las credenciales de MongoDB (por ejemplo, app fuera de Docker apuntando a otro usuario) o el contenedor quedó con variables viejas | Revisar `printenv` de Auth, recrear con `docker compose up -d --force-recreate auth-service` y, fuera de Compose, usar una URI con las mismas credenciales y `authSource=admin` |
+| Auth falla al conectar con `Authentication failed` mientras MongoDB está healthy | `MONGO_URI`/`MONGO_DATABASE` del contenedor no coinciden con las credenciales de MongoDB (por ejemplo, app fuera de Docker apuntando a otro usuario) o el contenedor quedó con variables viejas | Revisar `.env` en privado sin volcar variables, recrear con `docker compose up -d --force-recreate auth-service` y, fuera de Compose, usar una URI con las mismas credenciales y `authSource=admin` |
 | `Connection refused` en los logs de Auth | MongoDB todavía no está healthy, o la URI apunta al host equivocado | `docker compose ps`, `docker compose logs mongodb`; dentro de Compose el host es `mongodb`, desde el host es `localhost` |
 | `/actuator/health` responde `DOWN` | La app no alcanza MongoDB | Revisar `MONGO_URI` y el estado de MongoDB; el detalle del indicador está oculto, usar logs y el `ping` con `mongosh` |
 | El arranque falla con `port is already allocated` para el puerto 27017 | Otro proceso o contenedor MongoDB usa el puerto 27017 | Detener el contenedor o proceso que lo ocupa (`Get-NetTCPConnection -LocalPort 27017`) antes de levantar el stack |

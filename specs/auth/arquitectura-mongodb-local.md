@@ -27,7 +27,7 @@ Los hitos anteriores ya entregaron la infraestructura Docker que cubre la mayor 
 | Healthcheck MongoDB (`mongosh --eval ping`) | ✅ intacto | ídem |
 | Volumen nombrado `mongodb-data` | ✅ intacto | ídem |
 | `depends_on: condition: service_healthy` en auth | ✅ intacto | ídem |
-| Variables `MONGO_URI`, `MONGO_DATABASE` vía `.env` | ✅ intacto | `services/auth-service/.env.example` |
+| URI construida por Compose y `MONGO_DATABASE` vía `.env` | ✅ integrado | `services/auth-service/docker-compose.yml` |
 | `.env` excluido de git (`.gitignore`) | ✅ intacto | `services/auth-service/.gitignore` |
 | `/actuator/health` con indicador MongoDB | ✅ intacto | `application.yml` |
 | `devops-local.md` con comandos operativos básicos | ✅ existe — **ampliar** | `delivery/devops-local.md` |
@@ -37,7 +37,7 @@ Lo que H2.4 **agrega**:
 | Qué | Tipo |
 |-----|------|
 | Variables `MONGO_USER` y `MONGO_PASSWORD` en `.env.example` | MODIFICAR |
-| Autenticación MongoDB en `docker-compose.yml` (opcional dev) | MODIFICAR |
+| Autenticación MongoDB obligatoria en `docker-compose.yml` local | MODIFICAR |
 | Sección "Runbook de diagnóstico y reset" en `devops-local.md` | NUEVO en doc |
 | Sección "Persistencia y reset de datos" en `devops-local.md` | NUEVO en doc |
 
@@ -50,12 +50,12 @@ No se toca código Java (`application.yml`, pom, ni ningún `.java`): H2.4 es ex
 La especificación menciona `MONGO_USER` y `MONGO_PASSWORD` como variables de entorno esperadas.
 El alcance excluye TLS/SSL y configuración productiva. **Decisión**: añadir autenticación básica
 (`SCRAM-SHA-256`) al servicio MongoDB de Compose vía `MONGO_INITDB_ROOT_USERNAME` /
-`MONGO_INITDB_ROOT_PASSWORD`. Es opcional para desarrollo (si las variables no están en `.env`,
-Compose usa valores por defecto de ejemplo no secretos); no altera el comportamiento de los tests
+`MONGO_INITDB_ROOT_PASSWORD`. Las variables `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DATABASE`
+y `JWT_SECRET` son obligatorias y no tienen defaults en Compose; no altera el comportamiento de los tests
 (Testcontainers levanta su propio contenedor sin auth).
 
-La URI de conexión pasa de `mongodb://mongodb:27017` a `mongodb://<user>:<pass>@mongodb:27017`.
-Esto obliga a actualizar el valor de ejemplo de `MONGO_URI` en `.env.example`.
+Compose construye `MONGODB_URI` y su alias `MONGO_URI` con las credenciales, la base de datos,
+el host `mongodb` y `authSource=admin`. No se define una URI alternativa en `.env.example`.
 
 > **Sin impacto en tests**: los tests de integración Testcontainers usan `@DynamicPropertySource`
 > con la URI del contenedor propio; no leen `MONGO_URI` del `docker-compose.yml`.
@@ -86,16 +86,13 @@ mongodb:
   ports:
     - "127.0.0.1:27017:27017"
   environment:
-    MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-mongodev}
-    MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-mongodev}
+    MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Set MONGO_USER in .env}
+    MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
+    MONGO_INITDB_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
   volumes:
     - mongodb-data:/data/db
   healthcheck:
-    test: >
-      mongosh --quiet --username ${MONGO_USER:-mongodev}
-        --password ${MONGO_PASSWORD:-mongodev}
-        --authenticationDatabase admin
-        --eval "if (db.adminCommand('ping').ok !== 1) quit(1)"
+    test: [CMD, mongosh, --quiet, --eval, "const admin = db.getSiblingDB('admin'); admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD); if (admin.runCommand({ping: 1}).ok !== 1) quit(1)"]
     interval: 10s
     timeout: 5s
     start_period: 20s
@@ -107,38 +104,38 @@ mongodb:
 
 ### 4.2 `MONGO_URI` en `auth-service`
 
-Actualizar la variable de entorno para incluir credenciales:
+Construir las dos variables de entorno con la misma URI autenticada:
 
 ```yaml
-MONGO_URI: ${MONGO_URI:?Set MONGO_URI in .env}
+MONGODB_URI: &mongodb-uri mongodb://${MONGO_USER:?Set MONGO_USER in .env}:${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}@mongodb:27017/${MONGO_DATABASE:?Set MONGO_DATABASE in .env}?authSource=admin
+MONGO_URI: *mongodb-uri
 ```
 
-Sin cambio en la declaración YAML (ya tiene `?`), pero el **valor en `.env.example`** cambia
-(ver §5).
+La URI se deriva de las variables obligatorias de §5; no se proporciona un default.
 
 ---
 
 ## 5. Cambios en `.env.example`
 
-Agregar `MONGO_USER` y `MONGO_PASSWORD`; actualizar `MONGO_URI` con credenciales:
+Agregar `MONGO_USER` y `MONGO_PASSWORD` vacíos y dejar `JWT_SECRET` vacío como marcadores
+no utilizables. Completar los tres en el `.env` privado antes del arranque:
 
 ```dotenv
-# Local examples only. Copy to .env (ignored by Git).
-# Inside Compose use mongodb; for an app on the host use localhost.
-MONGO_USER=mongodev
-MONGO_PASSWORD=mongodev
-MONGO_URI=mongodb://mongodev:mongodev@mongodb:27017
+# Copy to .env (ignored by Git) and fill all empty required values before startup.
+# Use URI-safe letters/digits for credentials; Compose builds the authenticated URI.
+MONGO_USER=
+MONGO_PASSWORD=
 MONGO_DATABASE=auth_local
 PORT=8080
-# Public development example (>=32 ASCII bytes); replace outside local development.
-JWT_SECRET=dev-only-jwt-secret-change-me-32-chars-minimum
+# Required: generate a local secret of at least 32 ASCII bytes.
+JWT_SECRET=
 # Optional token lifetime in milliseconds (default: 24 hours).
 JWT_EXPIRATION_MS=86400000
 ```
 
-> `MONGO_USER` y `MONGO_PASSWORD` son credenciales de **demo exclusivo de desarrollo**.
-> No versionar valores reales fuera de este ejemplo público. El `.env` real (no versionado)
-> debe tener credenciales distintas por entorno.
+> `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DATABASE` y `JWT_SECRET` son obligatorias, sin defaults
+> en Compose. Generar credenciales propias y una clave JWT de al menos 32 bytes ASCII.
+> No versionar secretos; guardarlos únicamente en el `.env` privado ignorado por Git.
 
 ---
 
@@ -188,8 +185,8 @@ docker compose logs mongodb --tail 100
 # 3. Ver por qué Auth Service falla al conectar
 docker compose logs auth-service --tail 100
 
-# 4. Verificar variables del contenedor Auth (sin mostrar JWT_SECRET)
-docker compose exec auth-service printenv | Select-String 'MONGO'
+# 4. Verificar variables obligatorias sin imprimir la URI ni secretos
+docker compose config --quiet
 
 # 5. Probar URI directamente desde el contenedor Auth (requiere mongosh en alpine)
 # Alternativa: desde host en localhost:27017 (ver arriba)
@@ -252,7 +249,7 @@ Solo se modifican o crean archivos de infraestructura y documentación:
 ```
 services/auth-service/
 ├── docker-compose.yml           [MODIFICAR] agregar auth MongoDB (MONGO_INITDB_ROOT_*, healthcheck)
-└── .env.example                 [MODIFICAR] agregar MONGO_USER, MONGO_PASSWORD; actualizar MONGO_URI
+└── .env.example                 [MODIFICAR] marcadores vacíos para credenciales y JWT_SECRET
 
 delivery/
 └── devops-local.md              [MODIFICAR] agregar sección runbook diagnóstico y reset
@@ -270,7 +267,7 @@ developer: docker compose up --build -d --wait
   → inicia mongodb con MONGO_INITDB_ROOT_USERNAME/PASSWORD
   → healthcheck autentica con mongosh --username --password
   → mongodb: healthy
-  → inicia auth-service con MONGO_URI=mongodb://<user>:<pass>@mongodb:27017
+  → inicia auth-service con MONGO_URI construida con credenciales, base y authSource=admin
   → auth-service conecta a MongoDB autenticado
   → /actuator/health → { status: UP, mongodb: { status: UP } }
 ```
@@ -314,8 +311,8 @@ La suite `./mvnw -q -B verify` pasa sin cambios.
 ## 12. Checklist antes de terminar
 
 - [ ] `docker-compose.yml` agrega `MONGO_INITDB_ROOT_*` y healthcheck con credenciales
-- [ ] `.env.example` incluye `MONGO_USER`, `MONGO_PASSWORD` y `MONGO_URI` actualizada
+- [ ] `.env.example` incluye marcadores vacíos para `MONGO_USER`, `MONGO_PASSWORD` y `JWT_SECRET`
 - [ ] `.env` sigue excluido de git (`.gitignore` no se toca — ya tiene `.env`)
 - [ ] `devops-local.md` tiene la sección de runbook con diagnóstico y reset
 - [ ] Los cambios de Compose no afectan los tests (Testcontainers/Flapdoodle)
-- [ ] `docker compose --env-file .env.example config --quiet` pasa (validación YAML)
+- [ ] `docker compose config --quiet` pasa con un `.env` privado completo; sin variables obligatorias falla

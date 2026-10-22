@@ -71,7 +71,7 @@ docker compose restart auth-service
 docker compose up -d --wait
 $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body
 $profile = Invoke-RestMethod http://localhost:8080/api/v1/users/me -Headers @{ Authorization = ('Bearer ' + $login.token) }
-if ($profile.id -ne $created.id) { throw 'El usuario no coincide tras reiniciar Auth' }
+if ($profile.id -ne $created.user.id) { throw 'El usuario no coincide tras reiniciar Auth' }
 # Verificar también conservación del volumen al detener todo el stack:
 docker compose down
 docker compose up -d --wait
