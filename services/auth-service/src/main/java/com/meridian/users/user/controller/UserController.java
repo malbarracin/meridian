@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
@@ -16,6 +17,7 @@ import com.meridian.users.exception.ErrorResponse;
 import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
+import com.meridian.users.user.exception.InvalidCredentialsException;
 import com.meridian.users.user.service.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,9 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
@@ -38,9 +43,49 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RequestMapping(value = "/api/v1/users", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
 @Tag(name = "Usuarios", description = "Registro y consulta de los datos públicos de usuarios")
+@SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 public class UserController {
 
     private final UserService userService;
+
+    /**
+     * Consulta el perfil persistido del usuario autenticado.
+     * @param authorization cabecera con formato Bearer y JWT de acceso
+     * @return 200 con el perfil público actual, sin contraseña ni hash
+     */
+    @GetMapping("/me")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Consultar mi perfil",
+            description = "Lee el perfil persistido usando el subject del JWT firmado y vigente del header "
+                    + "Authorization: Bearer <token>. No expone la contraseña ni su hash.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Perfil del usuario autenticado",
+                    content = @Content(schema = @Schema(implementation = UserResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {"id":"6710f3a2c9e77c0012345678","name":"Ana Pérez",
+                                    "email":"ana.perez@example.com","createdAt":"2026-10-22T10:00:00Z"}
+                                    """))),
+            @ApiResponse(responseCode = "401", description = "JWT ausente, inválido o expirado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(value = """
+                                    {"code":"UNAUTHORIZED","message":"Credenciales inválidas",
+                                    "details":[],"timestamp":"2026-10-22T10:05:00Z"}
+                                    """))),
+            @ApiResponse(responseCode = "404", description = "Usuario no encontrado",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(ref = "#/components/examples/NotFound"))),
+            @ApiResponse(responseCode = "500", description = "Error interno",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class),
+                            examples = @ExampleObject(ref = "#/components/examples/InternalError")))
+    })
+    public ResponseEntity<UserResponse> getMe(
+            @Parameter(description = "JWT de acceso con prefijo Bearer", example = "Bearer eyJhbGciOiJIUzI1NiJ9...")
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
+            throw new InvalidCredentialsException();
+        }
+        return ResponseEntity.ok(userService.getByToken(authorization.substring(7)));
+    }
 
     /**
      * Registra un usuario con los datos validados de la solicitud.

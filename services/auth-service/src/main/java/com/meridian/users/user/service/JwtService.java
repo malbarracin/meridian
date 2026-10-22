@@ -14,6 +14,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
 import com.meridian.users.config.JwtConfig;
+import com.meridian.users.user.exception.InvalidCredentialsException;
 
 /** Genera y valida tokens de acceso firmados con HMAC-SHA256. */
 @Service
@@ -65,6 +66,28 @@ public class JwtService {
                     .getHeader().getAlgorithm());
         } catch (JwtException | IllegalArgumentException exception) {
             return false;
+        }
+    }
+
+    /**
+     * Extrae la identidad tras verificar firma HS256, expiración y subject, sin acceder a la base.
+     * @param token JWT de acceso
+     * @return identificador autenticado
+     * @throws InvalidCredentialsException si el token no es un token de acceso válido
+     */
+    public String extractUserId(String token) {
+        try {
+            var signedClaims = Jwts.parser().verifyWith(signingKey).build().parseSignedClaims(token);
+            String userId = signedClaims.getPayload().getSubject();
+            if (!Jwts.SIG.HS256.getId().equals(signedClaims.getHeader().getAlgorithm())
+                    || signedClaims.getPayload().getExpiration() == null || userId == null || userId.isBlank()) {
+                throw new InvalidCredentialsException();
+            }
+            return userId;
+        } catch (JwtException | IllegalArgumentException exception) {
+            InvalidCredentialsException unauthorized = new InvalidCredentialsException();
+            unauthorized.initCause(exception);
+            throw unauthorized;
         }
     }
 
