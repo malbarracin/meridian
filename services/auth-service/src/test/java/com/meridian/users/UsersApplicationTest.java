@@ -17,6 +17,8 @@ import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import com.meridian.users.config.JwtConfig;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
@@ -27,6 +29,9 @@ class UsersApplicationTest {
 
     @Autowired
     private MongoTemplate mongoTemplate;
+
+    @Autowired
+    private JwtConfig jwtConfig;
 
     @DynamicPropertySource
     static void configureMongo(DynamicPropertyRegistry registry) {
@@ -53,5 +58,13 @@ class UsersApplicationTest {
         Document response = mongoTemplate.executeCommand(new Document("ping", 1));
         assertThat(response.getDouble("ok")).isEqualTo(1.0);
         assertThat(mongoTemplate.getDb().getName()).isEqualTo("auth_service_test");
+    }
+
+    @Test
+    @DisplayName("El contexto carga JwtConfig desde application.yml de test")
+    void cargaJwtConfigDeTest() {
+        assertThat(jwtConfig.secret()).isEqualTo("test-secret-key-for-unit-tests-only-32chars");
+        assertThat(jwtConfig.secret()).hasSizeGreaterThanOrEqualTo(32);
+        assertThat(jwtConfig.expirationMs()).isEqualTo(3_600_000L);
     }
 }
