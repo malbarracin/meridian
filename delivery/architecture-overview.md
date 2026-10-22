@@ -25,7 +25,9 @@ com.meridian.users
 ├── UsersApplication.java
 ├── config/
 │   ├── OpenApiConfig.java          # metadatos y ejemplos OpenAPI
-│   └── SecurityConfig.java         # PasswordEncoder BCrypt
+│   ├── JwtConfig.java              # jwt.secret y jwt.expiration-ms
+│   ├── SecurityConfig.java         # PasswordEncoder BCrypt
+│   └── UserIndexConfig.java        # índice único de email en prod
 ├── exception/                      # contrato de error transversal
 │   ├── ErrorResponse.java          # record code/message/details/timestamp
 │   ├── FieldError.java             # record field/message
@@ -37,7 +39,8 @@ com.meridian.users
     ├── controller/
     │   └── UserController.java     # @RequestMapping("/api/v1/users")
     ├── service/
-    │   └── UserService.java        # reglas de registro y consulta
+    │   ├── UserService.java        # reglas de registro y consulta
+    │   └── JwtService.java         # emisión y validación HS256
     ├── repository/
     │   └── UserRepository.java     # MongoRepository<User, String>
     ├── mapper/
@@ -46,7 +49,8 @@ com.meridian.users
     │   └── User.java               # @Document(collection = "users")
     ├── dto/
     │   ├── RegisterRequest.java    # name, email, password
-    │   └── UserResponse.java       # id, name, email, createdAt
+    │   ├── UserResponse.java       # id, name, email, createdAt
+    │   └── AuthResponse.java       # user + token
     └── exception/
         ├── DuplicateUserException.java
         └── UserNotFoundException.java
@@ -60,13 +64,15 @@ Cada módulo de dominio usa subpaquetes por capa (`controller`, `service`, `repo
 | Capa | Clase | Responsabilidad | No hace |
 |---|---|---|---|
 | Controller | `UserController` | Recibe HTTP, valida con `@Valid`, devuelve status y DTO | Reglas de negocio ni mapeo campo a campo |
-| Service | `UserService` | Normaliza email, verifica unicidad, hashea contraseña, arma la entidad y consulta | Conocer HTTP |
+| Service | `UserService` | Normaliza email, verifica unicidad, hashea contraseña, arma la entidad, consulta y pide el JWT | Conocer HTTP |
+| Service | `JwtService` | Firma y valida tokens HS256 con `JwtConfig` | Reglas de negocio de usuarios |
 | Repository | `UserRepository` | Persistencia en MongoDB y búsqueda por email | Reglas de negocio |
 | Mapper | `UserMapper` | Convierte `User` → `UserResponse` (MapStruct) | Reglas de negocio |
 | Entity | `User` | Documento persistido en la colección `users` | Exponerse por la API |
-| DTO | `RegisterRequest`, `UserResponse` | Contrato HTTP de entrada y salida | Lógica de negocio |
+| DTO | `RegisterRequest`, `UserResponse`, `AuthResponse` | Contrato HTTP de entrada y salida | Lógica de negocio |
 
-`User` no se expone: el controller solo devuelve `UserResponse` (sin `passwordHash`).
+`User` no se expone: el controller devuelve `AuthResponse` en el alta (con `UserResponse` embebido y
+el JWT) y `UserResponse` en la consulta. Ninguno incluye `passwordHash`.
 
 ## Modelo persistido
 
@@ -82,13 +88,14 @@ Colección MongoDB `users`, documento `User`:
 | `updatedAt` | `Instant` | Asignado por el servicio al registrar |
 
 La unicidad de email tiene dos defensas: la verificación `findByEmail` del servicio (409 de dominio)
-y el índice único de MongoDB (`DuplicateKeyException`, también mapeada a 409).
+y el índice único de MongoDB (`DuplicateKeyException`, también mapeada a 409). El JWT no se persiste:
+se genera al responder cada alta a partir del id y el email del usuario.
 
 ## Endpoints
 
 | Método | Ruta | Request | Respuesta OK | Errores |
 |---|---|---|---|---|
-| POST | `/api/v1/users` | `RegisterRequest` | `201` + `UserResponse` | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 409 `CONFLICT`, 500 `INTERNAL_ERROR` |
+| POST | `/api/v1/users` | `RegisterRequest` | `201` + `AuthResponse` (`user` + `token`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 409 `CONFLICT`, 500 `INTERNAL_ERROR` |
 | GET | `/api/v1/users/{id}` | `id` en el path | `200` + `UserResponse` | 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
 | GET | `/actuator/health` | — | `200` + `{"status":"UP"}` | — |
 
@@ -107,9 +114,14 @@ UserController.registerUser(@Valid RegisterRequest)
       construye User (name, email normalizado, passwordHash, createdAt, updatedAt)
       UserRepository.save(User) → DuplicateKeyException si el índice unique falla (409)
       UserMapper.toResponse(User)
-  ← UserResponse
-← 201 Created + UserResponse
+      JwtService.generateToken(id, email) → JWT HS256 (sub, email, iat, exp)
+  ← AuthResponse(UserResponse, token)
+← 201 Created + AuthResponse + Location
 ```
+
+El JWT se firma con `jwt.secret` (`JWT_SECRET`, mínimo 32 bytes) y vence según `jwt.expiration-ms`
+(`JWT_EXPIRATION_MS`, 24 horas por defecto). `JwtService.isValid` verifica firma HS256 y expiración;
+no hay endpoint HTTP que valide tokens.
 
 ### GET /api/v1/users/{id}
 
@@ -162,6 +174,10 @@ spring:
       database: ${MONGO_DATABASE}
       auto-index-creation: false   # true en dev/docker/test
 
+jwt:
+  secret: ${JWT_SECRET}                  # obligatoria, mínimo 32 bytes
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
 server:
   port: ${PORT:8080}
   error:
@@ -169,8 +185,10 @@ server:
     include-message: never
 ```
 
-`MONGO_URI` y `MONGO_DATABASE` son obligatorias y no tienen valor por defecto: si faltan, el arranque
-falla explícitamente. No hay base embebida como fallback en ningún perfil.
+`MONGO_URI`, `MONGO_DATABASE` y `JWT_SECRET` son obligatorias y no tienen valor por defecto: si
+faltan, el arranque falla explícitamente. No hay base embebida como fallback en ningún perfil.
+`JWT_SECRET` no se versiona: en local y Compose se usa la clave pública de `.env.example`; en CI, la
+clave de test del workflow; en producción, el Secret externo `auth-jwt` de Helm.
 
 Perfiles:
 
@@ -191,7 +209,8 @@ y `springdoc.api-docs.enabled` en `false`).
 | Entidad | `UserTest` | `equals`/`hashCode`/`toString` sin datos sensibles |
 | DTO | `RegisterRequestValidationTest` | Restricciones de Bean Validation |
 | Repositorio | `UserRepositoryTest` | MongoDB embebido, búsqueda y unicidad |
-| Servicio | `UserServiceTest`, `UserRegistrationIntegrationTest` | Normalización, hash, duplicado, flujo real |
+| Servicio | `UserServiceTest`, `UserRegistrationIntegrationTest` | Normalización, hash, duplicado, JWT, flujo real |
+| JWT | `JwtConfigTest`, `JwtServiceTest` | Propiedades, firma, claims, expiración y clave corta |
 | Mapper | `UserMapperTest` | `User` → `UserResponse` |
 | Controller | `UserControllerTest` | `@WebMvcTest`: 201, 400, 404, 409 y contrato |
 | Contrato de error | `ErrorContractHttpTest`, `GlobalExceptionHandlerTest` | Mapeo HTTP y JSON |

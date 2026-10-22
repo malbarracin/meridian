@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "auth-service",
-    "description": "Registro y consulta de los datos públicos de usuarios del auth-service. Orden sugerido: carpeta 1 (flujo feliz) → carpeta 2 (errores) → carpeta 3 (salud). El alta genera un email único por corrida y guarda el id en {{userId}}; los pedidos siguientes lo reutilizan.",
+    "description": "Registro y consulta de los datos públicos de usuarios del auth-service. Orden sugerido: carpeta 1 (flujo feliz) → carpeta 2 (errores) → carpeta 3 (salud). El alta genera un email único por corrida, devuelve AuthResponse (user + token JWT) y guarda el id en {{userId}} y el token en {{authToken}}; los pedidos siguientes los reutilizan. Los tokens de los ejemplos son marcadores, no credenciales reales.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -16,12 +16,16 @@
     {
       "key": "userEmail",
       "value": ""
+    },
+    {
+      "key": "authToken",
+      "value": ""
     }
   ],
   "item": [
     {
       "name": "1. Flujo feliz",
-      "description": "Alta de usuario y consulta del usuario recién creado. Ejecutar en orden: el alta guarda {{userId}} y {{userEmail}}.",
+      "description": "Alta de usuario y consulta del usuario recién creado. Ejecutar en orden: el alta guarda {{userId}}, {{userEmail}} y {{authToken}}.",
       "item": [
         {
           "name": "Registrar usuario",
@@ -53,7 +57,7 @@
                 }
               }
             },
-            "description": "Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Respuestas: 201 usuario creado, 400 datos inválidos, 409 email ya registrado, 500 error interno. El email se genera con la marca de tiempo para poder repetir la corrida."
+            "description": "Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Responde 201 con AuthResponse: perfil público en user y JWT HS256 en token. Respuestas: 201 usuario creado, 400 datos inválidos, 409 email ya registrado, 500 error interno. El email se genera con la marca de tiempo para poder repetir la corrida."
           },
           "event": [
             {
@@ -72,11 +76,14 @@
                 "exec": [
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('devuelve el id del usuario', () => pm.expect(body.id).to.be.a('string'));",
-                  "pm.test('devuelve el email registrado', () => pm.expect(body.email).to.eql(pm.collectionVariables.get('userEmail')));",
-                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; });",
-                  "pm.test('incluye createdAt', () => pm.expect(body.createdAt).to.be.a('string'));",
-                  "pm.collectionVariables.set('userId', body.id);"
+                  "pm.test('devuelve AuthResponse con user y token', () => { pm.expect(body).to.have.all.keys('user', 'token'); });",
+                  "pm.test('devuelve el id del usuario', () => pm.expect(body.user.id).to.be.a('string'));",
+                  "pm.test('devuelve el email registrado', () => pm.expect(body.user.email).to.eql(pm.collectionVariables.get('userEmail')));",
+                  "pm.test('incluye createdAt', () => pm.expect(body.user.createdAt).to.be.a('string'));",
+                  "pm.test('devuelve un JWT con tres segmentos', () => { pm.expect(body.token).to.be.a('string').and.not.empty; pm.expect(body.token.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; pm.expect(body.user.password).to.be.undefined; pm.expect(body.user.passwordHash).to.be.undefined; });",
+                  "pm.collectionVariables.set('userId', body.user.id);",
+                  "pm.collectionVariables.set('authToken', body.token);"
                 ]
               }
             }
@@ -122,7 +129,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"id\": \"6710f3a2c9e77c0012345678\",\n  \"name\": \"Ana Pérez\",\n  \"email\": \"ana.perez@example.com\",\n  \"createdAt\": \"2026-10-22T10:00:00Z\"\n}"
+              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\"\n}"
             }
           ]
         },

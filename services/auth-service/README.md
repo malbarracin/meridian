@@ -1,12 +1,15 @@
 # auth-service — servicio de autenticación
 
 Servicio REST que registra y consulta los datos públicos de usuarios, con persistencia en MongoDB.
-Normaliza el email antes de guardarlo, garantiza su unicidad y nunca devuelve la contraseña ni su hash.
-Forma parte del sistema Meridian y es consumido por otros equipos para el alta y la consulta de usuarios.
+Normaliza el email antes de guardarlo, garantiza su unicidad, hashea la contraseña con BCrypt y, en el
+alta, devuelve el perfil público junto con un JWT de acceso firmado (HS256). Nunca devuelve la
+contraseña ni su hash. Forma parte del sistema Meridian y es consumido por otros equipos para el alta
+y la consulta de usuarios.
 
 ## Funcionalidades
 
-- Alta de usuario: `POST /api/v1/users` (nombre, email y contraseña).
+- Alta de usuario: `POST /api/v1/users` (nombre, email y contraseña) → `AuthResponse` con el perfil
+  público (`user`) y el JWT de acceso (`token`).
 - Consulta de usuario por id: `GET /api/v1/users/{id}`.
 - Health check: `GET /actuator/health`.
 
@@ -38,6 +41,8 @@ del índice único de email):
 Set-Location services/auth-service
 $env:MONGO_URI = 'mongodb://localhost:27017'
 $env:MONGO_DATABASE = 'auth_local'
+$env:JWT_SECRET = '<clave-local-de-al-menos-32-caracteres>'
+$env:JWT_EXPIRATION_MS = '86400000'
 $env:SPRING_PROFILES_ACTIVE = 'dev'
 .\mvnw.cmd spring-boot:run
 ```
@@ -48,12 +53,15 @@ Linux/macOS:
 cd services/auth-service
 export MONGO_URI=mongodb://localhost:27017
 export MONGO_DATABASE=auth_local
+export JWT_SECRET='<clave-local-de-al-menos-32-caracteres>'
+export JWT_EXPIRATION_MS=86400000
 export SPRING_PROFILES_ACTIVE=dev
 ./mvnw spring-boot:run
 ```
 
-Sin `MONGO_URI` y `MONGO_DATABASE` el arranque falla con un error explícito: no hay conexión por
-defecto ni base embebida de respaldo.
+Sin `MONGO_URI`, `MONGO_DATABASE` y `JWT_SECRET` el arranque falla con un error explícito: no hay
+conexión ni clave por defecto, y no hay base embebida de respaldo. `.env.example` trae una clave
+pública de desarrollo; nunca usar ese valor fuera del entorno local.
 
 ### Con Docker
 
@@ -66,8 +74,9 @@ docker compose up --build -d --wait
 Invoke-WebRequest http://localhost:8080/actuator/health
 ```
 
-El detalle de Compose, CI, Helm y despliegue está en `delivery/devops-local.md`.
-No usar el Compose como configuración de producción.
+`.env.example` incluye `JWT_SECRET` y `JWT_EXPIRATION_MS`; Compose usa la clave pública de
+desarrollo si no se define otra. El detalle de Compose, CI, Helm y despliegue está en
+`delivery/devops-local.md`. No usar el Compose como configuración de producción.
 
 ## Configuración
 
@@ -75,10 +84,15 @@ No usar el Compose como configuración de producción.
 |---|---|---|
 | `MONGO_URI` | URI de conexión a MongoDB | Sin valor: obligatoria |
 | `MONGO_DATABASE` | Nombre de la base de datos | Sin valor: obligatoria |
+| `JWT_SECRET` | Clave HMAC-SHA256 para firmar los JWT; mínimo 32 bytes | Sin valor: obligatoria |
+| `JWT_EXPIRATION_MS` | Vigencia del JWT en milisegundos | `86400000` (24 horas) |
 | `PORT` | Puerto HTTP del servicio | `8080` |
 | `SPRING_PROFILES_ACTIVE` | Perfil activo (`dev`, `docker`, `test`, `prod`) | Sin perfil |
 | `springdoc.swagger-ui.enabled` | Swagger UI | `false` en el perfil `prod` |
 | `springdoc.api-docs.enabled` | Endpoint `/v3/api-docs` | `false` en el perfil `prod` |
+
+`JWT_SECRET` debe ser privada y distinta por entorno: no versionar valores reales. En desarrollo se
+puede usar la clave pública de `.env.example`; en CI, la clave de test pública que define el workflow.
 
 Perfiles: `dev` y `docker` crean el índice único de email automáticamente; `prod` lo mantiene
 desactivado y el índice se crea con el script de operación descrito en `delivery/devops-local.md`.
@@ -92,11 +106,35 @@ desactivado y el índice se crea con el script de operación descrito en `delive
 
 | Método | Ruta | Qué hace | Respuestas |
 |---|---|---|---|
-| POST | `/api/v1/users` | Registra un usuario y devuelve sus datos públicos | 201, 400, 409, 500 |
+| POST | `/api/v1/users` | Registra un usuario y devuelve `AuthResponse`: perfil público + JWT | 201, 400, 409, 500 |
 | GET | `/api/v1/users/{id}` | Consulta un usuario por id | 200, 404, 500 |
 | GET | `/actuator/health` | Estado del servicio | 200 |
 
 Los endpoints viven bajo `/api/v1`; el versionado de API está deshabilitado en `project.yaml`.
+
+### Token JWT
+
+El alta responde `201 Created` con un `AuthResponse`:
+
+```json
+{
+  "user": {
+    "id": "6710f3a2c9e77c0012345678",
+    "name": "Ana Pérez",
+    "email": "ana.perez@example.com",
+    "createdAt": "2026-10-22T10:00:00Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+- Algoritmo de firma: HMAC-SHA256 (HS256), con la clave de `JWT_SECRET`.
+- Claims: `sub` = id del usuario, `email` = email normalizado, `iat` y `exp` (vigencia de
+  `JWT_EXPIRATION_MS`).
+- Uso previsto: cabecera `Authorization: Bearer <token>` en los servicios que consuman el JWT.
+  Este servicio solo emite y valida tokens internamente; no expone un endpoint de validación.
+- `user` nunca incluye la contraseña ni `passwordHash`; el `token` del ejemplo es un marcador, no un
+  token real.
 
 ### Errores
 
@@ -147,9 +185,10 @@ Linux/macOS: `./mvnw clean verify`. Desde la raíz del repositorio, `./mvnw -q -
 wrapper del servicio.
 
 La suite cubre entidad y repositorio contra MongoDB embebido, servicio, mapper, controller con
-`MockMvc`, contrato de error y contexto completo. JaCoCo exige un mínimo de 80 % de cobertura de
-líneas y el reporte queda en `target/site/jacoco/index.html`. El build también regenera
-`delivery/openapi/openapi.json` y `openapi.yaml` mediante `OpenApiExportTest`.
+`MockMvc`, contrato de error, configuración y firma JWT (`JwtConfigTest`, `JwtServiceTest`) y
+contexto completo. JaCoCo exige un mínimo de 80 % de cobertura de líneas y el reporte queda en
+`target/site/jacoco/index.html`. El build también regenera `delivery/openapi/openapi.json` y
+`openapi.yaml` mediante `OpenApiExportTest`.
 
 ## Estructura del proyecto
 
@@ -160,15 +199,15 @@ services/auth-service/
 ├── docker-compose.yml
 └── src/main/java/com/meridian/users/
     ├── UsersApplication.java
-    ├── config/       # OpenApiConfig y PasswordEncoder BCrypt
+    ├── config/       # OpenApiConfig, JwtConfig, SecurityConfig y UserIndexConfig
     ├── exception/    # contrato de error global
     └── user/
         ├── controller/   # UserController
-        ├── service/      # UserService
+        ├── service/      # UserService y JwtService (emisión/validación HS256)
         ├── repository/   # UserRepository (MongoRepository)
         ├── mapper/       # UserMapper (MapStruct)
         ├── entity/       # User (@Document "users")
-        ├── dto/          # RegisterRequest, UserResponse
+        ├── dto/          # RegisterRequest, UserResponse, AuthResponse
         └── exception/    # DuplicateUserException, UserNotFoundException
 ```
 
