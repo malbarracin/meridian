@@ -14,7 +14,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.meridian.users.config.JwtConfig;
 import com.meridian.users.config.SecurityConfig;
+import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
@@ -37,12 +39,14 @@ class UserRegistrationIntegrationTest {
     private UserRepository userRepository;
 
     private PasswordEncoder passwordEncoder;
+    private JwtService jwtService;
     private UserService userService;
 
     @BeforeEach
     void setUp() {
         passwordEncoder = new SecurityConfig().passwordEncoder();
-        userService = new UserService(userRepository, passwordEncoder, Mappers.getMapper(UserMapper.class));
+        jwtService = new JwtService(new JwtConfig("test-secret-key-for-unit-tests-only-32chars", 3600000));
+        userService = new UserService(userRepository, passwordEncoder, Mappers.getMapper(UserMapper.class), jwtService);
     }
 
     @Test
@@ -57,7 +61,7 @@ class UserRegistrationIntegrationTest {
         });
         Instant before = Instant.now();
 
-        UserResponse response = userService.register(request);
+        AuthResponse response = userService.register(request);
 
         verify(userRepository).findByEmail("ana@example.com");
         ArgumentCaptor<User> capturedUser = ArgumentCaptor.forClass(User.class);
@@ -69,8 +73,10 @@ class UserRegistrationIntegrationTest {
         assertThat(passwordEncoder.matches(request.password(), savedUser.getPasswordHash())).isTrue();
         assertThat(savedUser.getCreatedAt()).isBetween(before, Instant.now());
         assertThat(savedUser.getUpdatedAt()).isEqualTo(savedUser.getCreatedAt());
-        assertThat(response).isEqualTo(new UserResponse("user-1", "Ana", "ana@example.com",
+        assertThat(response.user()).isEqualTo(new UserResponse("user-1", "Ana", "ana@example.com",
                 savedUser.getCreatedAt()));
+        assertThat(response.token()).isNotBlank();
+        assertThat(jwtService.isValid(response.token())).isTrue();
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
         assertThat(json).doesNotContain("password", savedUser.getPasswordHash());
         assertThat(request.toString()).doesNotContain(request.password(), request.email(), request.name());

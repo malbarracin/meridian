@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.meridian.users.exception.ErrorResponse;
+import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.service.UserService;
@@ -47,13 +48,13 @@ public class UserController {
      * El email se normaliza antes de guardarse y la contraseña se persiste solo como hash.
      *
      * @param request datos de registro
-     * @return 201 con los datos públicos del usuario creado
+     * @return 201 con los datos públicos del usuario creado y JWT de acceso
      */
     @PostMapping
     @Operation(summary = "Registrar usuario",
             description = "Crea un usuario con nombre, email y contraseña. El email se normaliza (trim y "
                     + "minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. "
-                    + "Devuelve únicamente los datos públicos del usuario creado.",
+                    + "Devuelve el perfil público del usuario creado y un JWT de acceso.",
             requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
                     required = true, description = "Datos del usuario a registrar.",
                     content = @Content(schema = @Schema(implementation = RegisterRequest.class),
@@ -64,13 +65,16 @@ public class UserController {
                                             "password":"password123"}"""))))
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Usuario registrado",
-                    content = @Content(schema = @Schema(implementation = UserResponse.class),
+                    content = @Content(schema = @Schema(implementation = AuthResponse.class),
                             examples = @ExampleObject(name = "Usuario creado", value = """
                                     {
-                                      "id": "6710f3a2c9e77c0012345678",
-                                      "name": "Ana Pérez",
-                                      "email": "ana.perez@example.com",
-                                      "createdAt": "2026-10-22T10:00:00Z"
+                                      "user": {
+                                        "id": "6710f3a2c9e77c0012345678",
+                                        "name": "Ana Pérez",
+                                        "email": "ana.perez@example.com",
+                                        "createdAt": "2026-10-22T10:00:00Z"
+                                      },
+                                      "token": "eyJhbGciOiJIUzI1NiJ9..."
                                     }"""))),
             @ApiResponse(responseCode = "400", description = "Datos inválidos o JSON mal formado",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
@@ -87,10 +91,10 @@ public class UserController {
                             examples = @ExampleObject(name = "Error interno",
                                     ref = "#/components/examples/InternalError")))
     })
-    public ResponseEntity<UserResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
-        UserResponse response = userService.register(request);
+    public ResponseEntity<AuthResponse> registerUser(@Valid @RequestBody RegisterRequest request) {
+        AuthResponse response = userService.register(request);
         return ResponseEntity.created(ServletUriComponentsBuilder.fromCurrentRequest()
-                .path("/{id}").buildAndExpand(response.id()).toUri()).body(response);
+                .path("/{id}").buildAndExpand(response.user().id()).toUri()).body(response);
     }
 
     /**
