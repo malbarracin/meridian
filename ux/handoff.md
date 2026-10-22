@@ -84,4 +84,4 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 - Assets: wordmark MERIDIAN (componente) · export SVG/PNG · gráficos como parte de ChartPanel (no assets sueltos)
 - Motion: NewsCard entrada fade + translateY corto · `motion.base` 250 ms · stagger 100 ms entre cards · reduced-motion: sin translate/stagger, solo opacidad o sin animación
 - Marca: MERIDIAN en header; sin Soma / SOMA / Ops Deck; sin KPIs operativos (usuarios activos / sesiones / errores)
-- Layout: columna portrait 390 · Header (MERIDIAN + usuario + Salir) → Hero → Sección Dólar (MetricCards apiladas) → Sección Cripto (BTC/ETH apiladas) → Sección Bolsa (ChartPanel Bolsa + ChartPanel Cripto, chart ≥160–180) → Sección Noticias (NewsCards apiladas) · Salir y CTA Abrir ≥ 44
+- Layout: columna portrait 390 · Header (MERIDIAN + usuario + Salir) → Hero → Sección Dólar (MetricCards apiladas) → Sección Cripto (BTC/ETH apiladas) → Sección Bolsa (ChartPanel Bolsa + ChartPanel Cripto, chart ancho = content del panel ~326, altura ≥160–180; `chart-line` sigue tops de barras alcista; summary wrap auto-height) → Sección Noticias (NewsCards apiladas) · Salir y CTA Abrir ≥ 44
