@@ -104,6 +104,18 @@ class FrankfurterAdapterTest {
         assertThatThrownBy(adapter::fetchFx).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    @DisplayName("Rechaza cuando falta la tasa BRL requerida")
+    void rechazaCuandoFaltaTasaBrl() {
+        server.enqueue(jsonResponse("""
+                {"amount":1,"base":"USD","date":"2026-10-22","rates":{"EUR":0.92}}
+                """));
+
+        assertThatThrownBy(adapter::fetchFx)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requeridos");
+    }
+
     private FrankfurterAdapter createAdapter(boolean useMock) {
         return new FrankfurterAdapter(WebClient.builder().baseUrl(server.url("/").toString()).build(),
                 Mappers.getMapper(CurrencyMapper.class), useMock);

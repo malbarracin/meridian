@@ -106,6 +106,19 @@ class DolarApiAdapterTest {
         assertThatThrownBy(adapter::fetchDolar).isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    @DisplayName("Rechaza cuando falta el tipo blue requerido")
+    void rechazaCuandoFaltaTipoBlue() {
+        server.enqueue(jsonResponse("""
+                [{"casa":"oficial","compra":1000,"venta":1040},
+                 {"casa":"bolsa","compra":1100,"venta":1120}]
+                """));
+
+        assertThatThrownBy(adapter::fetchDolar)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("requeridas");
+    }
+
     private DolarApiAdapter createAdapter(boolean useMock) {
         return new DolarApiAdapter(WebClient.builder().baseUrl(server.url("/").toString()).build(),
                 Mappers.getMapper(CurrencyMapper.class), useMock);
