@@ -23,7 +23,14 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 - Marca: MERIDIAN en layers/assets; no usar Soma / SOMA / Ops Deck
 
 ##### Register — web
-- Tablero: (pendiente TASK-2)
+- Tablero: Register / web · https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4
+- Estados: default [Register / web](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · cargando [Register / web / loading](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · error inline [Register / web / error](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4) · error general [Register / web / error general](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041444f4)
+- Componentes: MERIDIAN wordmark · Input (default, disabled, error) · Button primary (default, loading) · ErrorBanner · password-toggle (texto "Mostrar")
+- Microcopy: título "Crear cuenta" · CTA "Registrarse" · link "¿Ya tenés cuenta? Iniciá sesión" · toggle "Mostrar" · loading "Cargando…" · errores "Ingresá un email válido" · "La contraseña debe tener al menos 8 caracteres" · "Este email ya tiene una cuenta. Iniciá sesión" · "Algo salió mal. Intentá de nuevo."
+- Datos: nombre, email, contraseña (formulario de registro; sin datos de API)
+- Assets: wordmark MERIDIAN (componente) · export SVG/PNG
+- Motion: CTA loading (spinner) · `motion.fast` 150 ms en hover/focus de Input y Button · reduced-motion: sin spinner animado (estado estático "Cargando…") o solo opacidad
+- Marca: MERIDIAN en layers; sin Soma / SOMA / Ops Deck
 
 ##### Register — mobile
 - Tablero: (pendiente TASK-3)
