@@ -9,6 +9,7 @@ import com.meridian.users.exception.ErrorCode;
 import com.meridian.users.exception.ErrorResponse;
 import com.meridian.users.exception.GlobalExceptionHandler;
 import com.meridian.users.exception.NotFoundException;
+import com.meridian.users.exception.UnauthorizedException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,6 +50,24 @@ class UserDomainExceptionTest {
         assertThat(body).isNotNull();
         assertThat(body.code()).isEqualTo(ErrorCode.NOT_FOUND.name());
         assertThat(body.message()).isEqualTo("Usuario no encontrado por id: user-42");
+        assertThat(body.details()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("InvalidCredentialsException extiende UnauthorizedException y responde 401 UNAUTHORIZED")
+    void mapsInvalidCredentialsToUnauthorizedContract() {
+        InvalidCredentialsException exception = new InvalidCredentialsException();
+
+        assertThat(exception).isInstanceOf(UnauthorizedException.class);
+        assertThat(exception.getMessage()).isEqualTo("Credenciales inválidas");
+
+        var response = handler.handleUnauthorized(exception);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        ErrorResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.code()).isEqualTo(ErrorCode.UNAUTHORIZED.name());
+        assertThat(body.message()).isEqualTo("Credenciales inválidas");
         assertThat(body.details()).isEmpty();
     }
 }
