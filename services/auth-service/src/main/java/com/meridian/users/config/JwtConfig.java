@@ -6,6 +6,7 @@ import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.WeakKeyException;
 
 /**
  * Configuracion de firma y vigencia de los tokens JWT.
@@ -19,6 +20,9 @@ public record JwtConfig(String secret, long expirationMs) {
     /** Valida la clave de firma al crear la configuracion, antes de aceptar solicitudes. */
     public JwtConfig {
         Objects.requireNonNull(secret, "JWT_SECRET es obligatorio");
+        if (secret.isBlank() || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new WeakKeyException("JWT_SECRET debe contener al menos 32 bytes y no puede estar en blanco");
+        }
         Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 }

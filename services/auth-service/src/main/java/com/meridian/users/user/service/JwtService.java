@@ -15,14 +15,22 @@ import io.jsonwebtoken.security.Keys;
 
 import com.meridian.users.config.JwtConfig;
 
-import lombok.RequiredArgsConstructor;
-
 /** Genera y valida tokens de acceso firmados con HMAC-SHA256. */
 @Service
-@RequiredArgsConstructor
 public class JwtService {
 
     private final JwtConfig jwtConfig;
+    private final SecretKey signingKey;
+
+    /**
+     * Valida y prepara la clave antes de permitir cualquier operacion con tokens.
+     *
+     * @param jwtConfig configuracion con una clave de al menos 32 bytes para HS256
+     */
+    public JwtService(JwtConfig jwtConfig) {
+        this.signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
+        this.jwtConfig = jwtConfig;
+    }
 
     /**
      * Genera un token con el identificador y el email normalizado del usuario.
@@ -38,7 +46,7 @@ public class JwtService {
                 .claim("email", email.trim().toLowerCase(Locale.ROOT))
                 .issuedAt(Date.from(issuedAt))
                 .expiration(Date.from(issuedAt.plusMillis(jwtConfig.expirationMs())))
-                .signWith(signingKey(), Jwts.SIG.HS256)
+                .signWith(signingKey, Jwts.SIG.HS256)
                 .compact();
     }
 
@@ -49,10 +57,9 @@ public class JwtService {
      * @return true si la firma es valida y el token no ha expirado
      */
     public boolean isValid(String token) {
-        SecretKey key = signingKey();
         try {
             return Jwts.SIG.HS256.getId().equals(Jwts.parser()
-                    .verifyWith(key)
+                    .verifyWith(signingKey)
                     .build()
                     .parseSignedClaims(token)
                     .getHeader().getAlgorithm());
@@ -61,7 +68,4 @@ public class JwtService {
         }
     }
 
-    private SecretKey signingKey() {
-        return Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
-    }
 }

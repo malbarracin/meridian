@@ -265,7 +265,12 @@ jwt:
   expiration-ms: ${JWT_EXPIRATION_MS:86400000}
 ```
 
-`src/test/resources/application.yml` — agregar secreto fijo para tests:
+`JWT_SECRET` es obligatorio desde el entorno en toda ejecucion del servicio, sin valor por defecto.
+No guardar secretos reales en el repositorio ni utilizar fixtures de tests como claves de despliegue.
+La clave debe generarse aleatoriamente, ser privada y distinta por entorno, con al menos 32 bytes.
+Una clave ausente, en blanco o insuficiente debe impedir el arranque antes de firmar o verificar tokens.
+
+`src/test/resources/application.yml` — fixture publico exclusivo para tests automatizados, sin uso en despliegues:
 
 ```yaml
 jwt:
@@ -293,7 +298,7 @@ JaCoCo: umbral mínimo **80%** line coverage (sin cambio). `JwtConfig` y `AuthRe
 | # | Riesgo / decisión | Recomendación |
 |---|-------------------|---------------|
 | 1 | **`JWT_SECRET` ausente en tests** | Definirlo en `src/test/resources/application.yml` como valor fijo (sin lógica real); no usar `@MockBean` de `JwtService` en el test de integración. |
-| 2 | **Longitud mínima de `JWT_SECRET`** | JJWT 0.12.x exige mínimo 256 bits (32 bytes) para HMAC-SHA256. Validar longitud en `JwtService` constructor o documentar en README. |
+| 2 | **Longitud mínima de `JWT_SECRET`** | JJWT 0.12.x exige mínimo 256 bits (32 bytes) para HMAC-SHA256. Validar al crear la configuracion y preparar la clave en el constructor de `JwtService`; rechazar configuraciones inseguras antes de operar con tokens. Documentar no reemplaza esta validacion. |
 | 3 | **`@EnableConfigurationProperties`** | Agregar en `UsersApplication` o en `JwtConfig` propia `@Configuration`; el dev elige la forma más limpia para el proyecto. |
 | 4 | **`OpenApiConfig` — ejemplos del POST** | Actualizar los ejemplos de respuesta 201 para mostrar `AuthResponse` con `user` y `token`; los errores 400/409/500 no cambian. |
 | 5 | **`UserResponse` en `AuthResponse`** | `AuthResponse.user()` es un `UserResponse` record anidado. Jackson serializa correctamente records anidados sin configuración adicional en Spring Boot 3.x. |

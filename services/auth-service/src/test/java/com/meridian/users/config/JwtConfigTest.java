@@ -55,7 +55,8 @@ class JwtConfigTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "too-short", "1234567890123456789012345678901"})
+    @ValueSource(strings = {"", "too-short", "1234567890123456789012345678901",
+            "                                "})
     @DisplayName("Falla el arranque cuando la clave JWT tiene menos de 32 bytes")
     void fallaArranqueConClaveCorta(String secret) {
         contextRunner
@@ -63,6 +64,7 @@ class JwtConfigTest {
                 .run(context -> {
                     assertThat(context).hasFailed();
                     assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(WeakKeyException.class);
+                    assertThat(context.getStartupFailure()).hasStackTraceContaining("JWT_SECRET");
                 });
     }
 
