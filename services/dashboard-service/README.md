@@ -12,4 +12,11 @@ Cada proveedor acepta `DASHBOARD_<PROVEEDOR>_BASE_URL` y
 Las claves se consumirán en los adapters; no se incorporan a los clientes base.
 
 Actuator: `/actuator/health`, `/actuator/info`. OpenAPI: `/v3/api-docs/dashboard`;
-Swagger UI: `/swagger-ui.html`. Los adapters y el endpoint se implementan en tareas posteriores.
+Swagger UI: `/swagger-ui.html`. El endpoint se implementa en una tarea posterior.
+
+Los adapters DolarApi y Frankfurter consultan dólar oficial/blue y USD→EUR/BRL,
+respectivamente, con un límite total de cinco segundos y propagación de errores
+al agregador. La caché TTL y la gestión de secciones degraded corresponden a otras tareas.
+Con `DASHBOARD_USE_MOCK=true` devuelven fixtures sin llamadas HTTP: dólar oficial
+1000/1040 ARS (compra/venta), blue 1200/1220 ARS y tasas USD→EUR 0.92,
+USD→BRL 5.10. Son datos ficticios estáticos, no cotizaciones actuales.
