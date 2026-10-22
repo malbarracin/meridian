@@ -1,0 +1,12 @@
+spring:
+  data:
+    mongodb:
+      uri: ${MONGO_URI}
+      database: ${MONGO_DATABASE}
+      auto-index-creation: false
+management:
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
