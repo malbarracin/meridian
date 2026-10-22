@@ -21,6 +21,9 @@ Set-Location ../..
 Editar `.env` antes de arrancar si se cambian la conexión o el puerto. El ejemplo no contiene
 credenciales: `MONGO_URI=mongodb://mongodb:27017`, `MONGO_DATABASE=auth_local`, `PORT=8080`.
 `PORT` publica el puerto del host; la app dentro de Compose escucha en 8080.
+H2.2 agrega `JWT_SECRET` (mínimo 32 bytes ASCII) y `JWT_EXPIRATION_MS` opcional
+(86400000 ms = 24 horas). Compose y `.env.example` incluyen una clave pública exclusiva
+de desarrollo; reemplazarla fuera del entorno local. Nunca usarla en producción.
 MongoDB conserva datos en el volumen `mongodb-data`; `down` no lo elimina.
 MongoDB local no usa autenticación y su puerto se publica solo en loopback para desarrollo.
 No usar este Compose como configuración de producción.
@@ -51,9 +54,10 @@ docker compose --env-file .env.example up -d mongodb
 $env:MONGO_URI = 'mongodb://localhost:27017'
 $env:MONGO_DATABASE = 'auth_local'
 $env:SPRING_PROFILES_ACTIVE = 'dev'
+$env:JWT_SECRET = 'dev-only-jwt-secret-change-me-32-chars-minimum'
 .\mvnw.cmd spring-boot:run
 # Tras detener la app con Ctrl+C:
-Remove-Item Env:MONGO_URI, Env:MONGO_DATABASE, Env:SPRING_PROFILES_ACTIVE
+Remove-Item Env:MONGO_URI, Env:MONGO_DATABASE, Env:SPRING_PROFILES_ACTIVE, Env:JWT_SECRET
 docker compose down
 Set-Location ../..
 ```
@@ -71,10 +75,11 @@ mongosh $env:MONGO_URI --quiet --eval 'db.getSiblingDB(process.env.MONGO_DATABAS
 ## CI/CD
 
 `.github/workflows/auth-service.yml` verifica cada push/PR que afecte el servicio, su workflow
-o el chart, con Temurin 21, caché Maven y `./mvnw clean verify`. En push a main construye la
+o el chart, con Temurin 21, caché Maven y `./mvnw -q -B clean verify`. El job build-test
+define `JWT_SECRET` de test (público, sin uso productivo) y `JWT_EXPIRATION_MS`. En push a main construye la
 imagen con tag `ghcr.io/<org>/<repo>:<sha>`, tras pasar tests. No publica imágenes porque no
 hay registry autorizado/configurado. Para push futuro: configurar permisos packages:write
-y GITHUB_TOKEN, o credencial del registry en GitHub Secrets. No hay secretos en workflows.
+y GITHUB_TOKEN, o credencial del registry en GitHub Secrets. No hay secretos reales en workflows.
 `auth-service-cd.yml` es una plantilla manual informativa; no despliega. Configurar registry,
 cluster, credenciales y environment protegido antes de agregar un deploy real.
 
@@ -86,6 +91,12 @@ vaciar `mongo.existingSecret` y pasar `mongo.uri` desde un archivo privado ignor
 (por ejemplo `services/auth-service/.env.helm.yaml`), nunca desde valores versionados.
 La base se configura con `mongo.database`; imagen, tag y imagePullSecrets son configurables.
 Los valores por defecto permiten renderizar sin secretos reales; no crean el Secret externo.
+H2.2 requiere además el Secret externo `auth-jwt` con clave `JWT_SECRET` de al menos
+32 bytes, aprovisionado por el gestor de secretos antes de instalar. `jwt.existingSecret`
+configura su nombre; `jwt.expirationMs` configura `JWT_EXPIRATION_MS` mediante ConfigMap
+(86400000 por defecto). Los overrides dev/prod heredan estas opciones de `values.yaml`.
+La clave llega al Deployment mediante `secretKeyRef`; el chart no almacena su valor.
+Después de rotar un Secret externo, reiniciar el Deployment para cargar la clave nueva.
 
 ```powershell
 helm lint helm/auth-service
@@ -111,6 +122,26 @@ aprovisionar el Secret con permisos de creación de índices antes del despliegu
 El servicio garantiza el índice durante el arranque. No se realizó deploy real.
 
 ## Verificación realizada
+
+### Cierre H2.2 / TASK-26 (2026-10-22)
+
+- `docker compose --env-file .env.example config --quiet`: pasó con las variables JWT.
+- `mvnw.cmd -q -B clean verify`: pasó, 65 tests sin fallos y gate JaCoCo 80%,
+  con JWT_SECRET=test-secret-key-for-unit-tests-only-32chars y JWT_EXPIRATION_MS=3600000,
+  los mismos valores públicos de la fixture que configura CI. La primera ejecución con
+  otra clave de test falló porque UsersApplicationTest exige estos valores exactos;
+  se corrigió el entorno de CI sin modificar tests.
+- `mvnw.cmd -q dependency:tree -Dverbose`: pasó.
+- YAML de workflow, Compose y values dev/prod validado con SnakeYAML 2.4,
+  rechazando claves duplicadas; plantillas Go pendientes de Helm.
+- Dockerfile existente validado por inspección: JDK 21 → JRE 21 alpine, usuario app,
+  wrapper y JAR Spring Boot completo con dependencias runtime JJWT; no requiere cambios.
+- El build Docker omite tests y no requiere JWT_SECRET durante compilación;
+  la clave se inyecta únicamente al ejecutar el contenedor.
+- El smoke correcto es `/actuator/health` y, opcionalmente, `POST /api/v1/users`;
+  la ruta `/api/v1/auth/register` del AC original es obsoleta.
+
+### Verificación previa H2.1
 
 - `mvnw.cmd clean verify -B -q`: pasó con Java 21 y gate JaCoCo 80%.
 - `mvnw.cmd dependency:tree -Dverbose -B`: BUILD SUCCESS.

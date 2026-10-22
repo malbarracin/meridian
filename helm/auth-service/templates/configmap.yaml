@@ -8,3 +8,4 @@ data:
   SPRING_PROFILES_ACTIVE: {{ .Values.springProfile | quote }}
   MONGO_DATABASE: {{ .Values.mongo.database | quote }}
   PORT: "8080"
+  JWT_EXPIRATION_MS: {{ .Values.jwt.expirationMs | quote }}

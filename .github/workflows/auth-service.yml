@@ -15,6 +15,10 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    env:
+      # Public test fixture, never a production signing key.
+      JWT_SECRET: test-secret-key-for-unit-tests-only-32chars
+      JWT_EXPIRATION_MS: '3600000'
     defaults:
       run:
         working-directory: services/auth-service
@@ -27,7 +31,7 @@ jobs:
           cache: maven
           cache-dependency-path: services/auth-service/pom.xml
       - run: chmod +x mvnw
-      - run: ./mvnw clean verify -B
+      - run: ./mvnw -q -B clean verify
   docker:
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
