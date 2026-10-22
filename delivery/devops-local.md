@@ -39,6 +39,9 @@ El build de imagen omite tests; CI los ejecuta antes del build Docker.
 
 ## Runbook MongoDB — diagnóstico, persistencia y reset
 
+Runbook dedicado con el detalle de arranque, diagnóstico, persistencia y reset:
+[`delivery/runbook-mongodb-local.md`](runbook-mongodb-local.md).
+
 Desde `services/auth-service`, con `.env` completo:
 
 ```powershell
