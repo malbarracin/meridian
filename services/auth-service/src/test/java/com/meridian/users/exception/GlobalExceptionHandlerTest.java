@@ -79,7 +79,7 @@ class GlobalExceptionHandlerTest {
     @Test
     @DisplayName("La lista de detalles del error es inmutable")
     void protectsErrorDetails() {
-        var response = new ErrorResponse(ErrorCode.BAD_REQUEST, "Solicitud inválida", List.of(), Instant.now());
+        var response = new ErrorResponse(ErrorCode.BAD_REQUEST.name(), "Solicitud inválida", List.of(), Instant.now());
         assertThatThrownBy(() -> response.details().add(new FieldError("name", "obligatorio")))
                 .isInstanceOf(UnsupportedOperationException.class);
     }
@@ -87,7 +87,7 @@ class GlobalExceptionHandlerTest {
     private static void assertResponse(ResponseEntity<ErrorResponse> response, HttpStatus status, ErrorCode code) {
         assertThat(response.getStatusCode()).isEqualTo(status);
         assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().code()).isEqualTo(code);
+        assertThat(response.getBody().code()).isEqualTo(code.name());
         assertThat(response.getBody().timestamp()).isBeforeOrEqualTo(Instant.now());
         assertThat(response.getBody().details()).isNotNull();
     }

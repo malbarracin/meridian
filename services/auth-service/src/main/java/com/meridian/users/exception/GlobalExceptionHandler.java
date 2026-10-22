@@ -74,6 +74,6 @@ public class GlobalExceptionHandler {
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, ErrorCode code, String message,
             List<FieldError> details) {
-        return ResponseEntity.status(status).body(new ErrorResponse(code, message, details, Instant.now()));
+        return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message, details, Instant.now()));
     }
 }
