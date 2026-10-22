@@ -18,7 +18,7 @@
       "post" : {
         "tags" : [ "Usuarios" ],
         "summary" : "Registrar usuario",
-        "description" : "Crea un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Devuelve únicamente los datos públicos del usuario creado.",
+        "description" : "Crea un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Devuelve el perfil público del usuario creado y un JWT de acceso.",
         "operationId" : "registerUser",
         "requestBody" : {
           "description" : "Datos del usuario a registrar.",
@@ -48,16 +48,19 @@
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/UserResponse"
+                  "$ref" : "#/components/schemas/AuthResponse"
                 },
                 "examples" : {
                   "Usuario creado" : {
                     "description" : "Usuario creado",
                     "value" : {
-                      "id" : "6710f3a2c9e77c0012345678",
-                      "name" : "Ana Pérez",
-                      "email" : "ana.perez@example.com",
-                      "createdAt" : "2026-10-22T10:00:00Z"
+                      "user" : {
+                        "id" : "6710f3a2c9e77c0012345678",
+                        "name" : "Ana Pérez",
+                        "email" : "ana.perez@example.com",
+                        "createdAt" : "2026-10-22T10:00:00Z"
+                      },
+                      "token" : "eyJhbGciOiJIUzI1NiJ9..."
                     }
                   }
                 }
@@ -215,6 +218,21 @@
           }
         },
         "required" : [ "email", "name", "password" ]
+      },
+      "AuthResponse" : {
+        "type" : "object",
+        "description" : "Respuesta de registro exitoso: perfil público del usuario y JWT de acceso.",
+        "properties" : {
+          "user" : {
+            "$ref" : "#/components/schemas/UserResponse",
+            "description" : "Datos públicos del usuario recién creado."
+          },
+          "token" : {
+            "type" : "string",
+            "description" : "JWT firmado (HS256) listo para usar en cabeceras Authorization Bearer.",
+            "example" : "eyJhbGciOiJIUzI1NiJ9..."
+          }
+        }
       },
       "UserResponse" : {
         "type" : "object",
