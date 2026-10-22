@@ -13,6 +13,8 @@ import org.springframework.context.annotation.Configuration;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.WeakKeyException;
 
+import com.meridian.users.user.service.JwtService;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,7 +25,7 @@ class JwtConfigTest {
     private static final long TEST_EXPIRATION_MS = 3_600_000L;
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(JwtPropertiesConfiguration.class);
+            .withUserConfiguration(JwtPropertiesConfiguration.class, JwtService.class);
 
     @Test
     @DisplayName("Carga jwt.secret y jwt.expiration-ms desde propiedades")
@@ -34,6 +36,7 @@ class JwtConfigTest {
                         "jwt.expiration-ms=" + TEST_EXPIRATION_MS)
                 .run(context -> {
                     assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(JwtService.class);
                     JwtConfig jwtConfig = context.getBean(JwtConfig.class);
                     assertThat(jwtConfig.secret()).isEqualTo(TEST_SECRET);
                     assertThat(jwtConfig.secret()).hasSizeGreaterThanOrEqualTo(32);
