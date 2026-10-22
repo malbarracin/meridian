@@ -63,6 +63,34 @@ class JwtServiceTest {
     }
 
     @Test
+    @DisplayName("Rechaza un token vigente firmado con otra clave")
+    void rechazaTokenFirmadoConOtraClave() {
+        SecretKey otherKey = Jwts.SIG.HS256.key().build();
+        String token = Jwts.builder()
+                .subject(USER_ID)
+                .expiration(Date.from(Instant.now().plusMillis(EXPIRATION_MS)))
+                .signWith(otherKey, Jwts.SIG.HS256)
+                .compact();
+
+        assertThat(jwtService.isValid(token)).isFalse();
+    }
+
+    @Test
+    @DisplayName("Rechaza HS384 incluso cuando la firma y la vigencia son correctas")
+    void rechazaAlgoritmoDistintoDeHs256() {
+        String secret = "test-secret-for-hs384-algorithm-rejection-only-64-characters-long!!";
+        SecretKey signingKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        JwtService service = new JwtService(new JwtConfig(secret, EXPIRATION_MS));
+        String token = Jwts.builder()
+                .subject(USER_ID)
+                .expiration(Date.from(Instant.now().plusMillis(EXPIRATION_MS)))
+                .signWith(signingKey, Jwts.SIG.HS384)
+                .compact();
+
+        assertThat(service.isValid(token)).isFalse();
+    }
+
+    @Test
     @DisplayName("Rechaza un token firmado que ya expiro sin esperar en el test")
     void rechazaTokenExpirado() {
         String token = Jwts.builder()
