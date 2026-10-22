@@ -76,4 +76,12 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 - Layout: web 1440 · Header + Hero + Fila superior (4 MetricCards) + Fila media (2 ChartPanels) + Fila inferior (grid 3 NewsCards)
 
 ##### Dashboard — mobile
-- Tablero: (pendiente TASK-7 / TASK-8)
+- Tablero: Dashboard / mobile · https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f
+- Estados: default [Dashboard / mobile](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · cargando / error parcial / error total / reduced-motion → pendiente TASK-8
+- Componentes: MERIDIAN wordmark · Button secondary (Salir) · MetricCard (Dólar oficial, Dólar blue, BTC, ETH) · ChartPanel (Bolsa, Cripto) · NewsCard ×3
+- Microcopy: título "Pulso de mercados" · fecha "Jueves 22 de octubre de 2026" · usuario "Ana García" · CTA "Salir" · sección "Noticias IA y tecnología" · NewsCard CTA "Abrir"
+- Datos: Dólar oficial/blue (precio, variación, timestamp) · BTC/ETH (precio USD, variación 24h) · S&P Merval (valor, variación, chart 7d, resumen) · Cripto BTC/ETH (chart 7d, resumen) · noticias IA/Tech (título, fuente, fecha, resumen, url vía Abrir) ← APIs públicas vía backend adapter
+- Assets: wordmark MERIDIAN (componente) · export SVG/PNG · gráficos como parte de ChartPanel (no assets sueltos)
+- Motion: NewsCard entrada fade + translateY corto · `motion.base` 250 ms · stagger 100 ms entre cards · reduced-motion: sin translate/stagger, solo opacidad o sin animación
+- Marca: MERIDIAN en header; sin Soma / SOMA / Ops Deck; sin KPIs operativos (usuarios activos / sesiones / errores)
+- Layout: columna portrait 390 · Header (MERIDIAN + usuario + Salir) → Hero → Sección Dólar (MetricCards apiladas) → Sección Cripto (BTC/ETH apiladas) → Sección Bolsa (ChartPanel Bolsa + ChartPanel Cripto, chart ≥160–180) → Sección Noticias (NewsCards apiladas) · Salir y CTA Abrir ≥ 44
