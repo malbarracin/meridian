@@ -4,6 +4,8 @@ import java.nio.charset.StandardCharsets;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
@@ -47,6 +49,35 @@ class JwtConfigTest {
                         "jwt.secret=" + TEST_SECRET,
                         "jwt.expiration-ms=no-es-numero")
                 .run(context -> assertThat(context).hasFailed());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "too-short", "1234567890123456789012345678901"})
+    @DisplayName("Falla el arranque cuando la clave JWT tiene menos de 32 bytes")
+    void fallaArranqueConClaveCorta(String secret) {
+        contextRunner
+                .withPropertyValues("jwt.secret=" + secret, "jwt.expiration-ms=" + TEST_EXPIRATION_MS)
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(WeakKeyException.class);
+                });
+    }
+
+    @Test
+    @DisplayName("Falla el arranque cuando falta la clave JWT")
+    void fallaArranqueSinClave() {
+        contextRunner
+                .withPropertyValues("jwt.expiration-ms=" + TEST_EXPIRATION_MS)
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("Arranca con una clave JWT de exactamente 32 bytes")
+    void arrancaConClaveDeLongitudMinima() {
+        contextRunner
+                .withPropertyValues("jwt.secret=12345678901234567890123456789012",
+                        "jwt.expiration-ms=" + TEST_EXPIRATION_MS)
+                .run(context -> assertThat(context).hasNotFailed());
     }
 
     @Test

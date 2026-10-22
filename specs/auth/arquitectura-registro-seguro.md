@@ -250,7 +250,7 @@ Propiedad en `<properties>`:
 <jjwt.version>0.12.6</jjwt.version>
 ```
 
-> JJWT 0.12.x es la versión estable actual que soporta Java 21 y Spring Boot 3.x sin configuración adicional.  
+> JJWT 0.12.x es la versión estable actual que soporta Java 21 y Spring Boot 3.x sin configuración adicional.
 > `jjwt-api` en compile, `jjwt-impl` y `jjwt-jackson` en runtime (patrón recomendado por el proyecto JJWT).
 
 ---
