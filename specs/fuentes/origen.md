@@ -1,8 +1,8 @@
 ---
 title: Origen de los requisitos — Meridian
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7
-updated: 2026-10-22T20:07:32.607Z
+updated: 2026-10-22T20:07:51.756Z
 ---
 
 # Origen de los requisitos

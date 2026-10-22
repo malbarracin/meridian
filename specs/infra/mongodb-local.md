@@ -1,8 +1,8 @@
 ---
 title: Infra — MongoDB en entorno local (H2.4)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ac75bb08ca781a68ee5d18db3da7d71
-updated: 2026-10-22T20:07:17.954Z
+updated: 2026-10-22T20:07:51.767Z
 ---
 
 # Infra — MongoDB en entorno local (H2.4)
