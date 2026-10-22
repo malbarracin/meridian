@@ -41,11 +41,12 @@ Meridian y es consumido por otros equipos para el alta, el login y la consulta d
 ### Local
 
 Definir las variables obligatorias y arrancar con el perfil `dev` (habilita la creación automática
-del índice único de email):
+del índice único de email). Si se usa el MongoDB de Compose (con autenticación), la URI debe llevar
+las mismas credenciales de `MONGO_USER` y `MONGO_PASSWORD` de `.env` y `authSource=admin`:
 
 ```powershell
 Set-Location services/auth-service
-$env:MONGO_URI = 'mongodb://localhost:27017'
+$env:MONGO_URI = 'mongodb://<usuario>:<clave>@localhost:27017/auth_local?authSource=admin'
 $env:MONGO_DATABASE = 'auth_local'
 $env:JWT_SECRET = '<clave-local-de-al-menos-32-caracteres>'
 $env:JWT_EXPIRATION_MS = '86400000'
@@ -57,7 +58,7 @@ Linux/macOS:
 
 ```bash
 cd services/auth-service
-export MONGO_URI=mongodb://localhost:27017
+export MONGO_URI='mongodb://<usuario>:<clave>@localhost:27017/auth_local?authSource=admin'
 export MONGO_DATABASE=auth_local
 export JWT_SECRET='<clave-local-de-al-menos-32-caracteres>'
 export JWT_EXPIRATION_MS=86400000
@@ -65,9 +66,11 @@ export SPRING_PROFILES_ACTIVE=dev
 ./mvnw spring-boot:run
 ```
 
-Sin `MONGO_URI`, `MONGO_DATABASE` y `JWT_SECRET` el arranque falla con un error explícito: no hay
-conexión ni clave por defecto, y no hay base embebida de respaldo. `.env.example` trae una clave
-pública de desarrollo; nunca usar ese valor fuera del entorno local.
+Con un MongoDB local sin autenticación, `MONGO_URI` puede ser `mongodb://localhost:27017`. Sin
+`MONGO_URI`, `MONGO_DATABASE` y `JWT_SECRET` el arranque falla con un error explícito: no hay
+conexión ni clave por defecto, y no hay base embebida de respaldo. `.env.example` entrega
+`JWT_SECRET` vacío: generar una clave local de al menos 32 bytes ASCII y no usar valores reales fuera
+del entorno local.
 
 ### Con Docker
 
@@ -76,20 +79,49 @@ El servicio incluye `docker-compose.yml` con MongoDB 7 y la aplicación:
 ```powershell
 Set-Location services/auth-service
 Copy-Item .env.example .env
+# Completar en .env: MONGO_USER, MONGO_PASSWORD y JWT_SECRET (mínimo 32 bytes ASCII).
+docker compose config --quiet
 docker compose up --build -d --wait
 Invoke-WebRequest http://localhost:8080/actuator/health
 ```
 
-`.env.example` incluye `JWT_SECRET` y `JWT_EXPIRATION_MS`; Compose usa la clave pública de
-desarrollo si no se define otra. El detalle de Compose, CI, Helm y despliegue está en
-`delivery/devops-local.md`. No usar el Compose como configuración de producción.
+`.env.example` entrega `MONGO_USER`, `MONGO_PASSWORD` y `JWT_SECRET` vacíos: Compose no arranca
+hasta completarlos. Compose construye `MONGODB_URI` (y su alias `MONGO_URI`) con esas credenciales,
+host `mongodb`, la base `MONGO_DATABASE` y `authSource=admin`; MongoDB 7 usa el volumen persistente
+`mongodb-data` y ambos servicios tienen healthcheck. Arranque, diagnóstico, persistencia y reset de
+datos de demo: [`delivery/runbook-mongodb-local.md`](../../delivery/runbook-mongodb-local.md). El
+detalle de Compose, CI, Helm y despliegue está en `delivery/devops-local.md`. No usar el Compose como
+configuración de producción.
 
 ## Configuración
 
+### Variables de entorno de MongoDB
+
+Para el entorno local con Compose, `.env` (copiado de `.env.example`, ignorado por Git) define:
+
+| Variable | Para qué | Valor |
+|---|---|---|
+| `MONGO_USER` | Usuario root de MongoDB y usuario de la URI de conexión | Requerida; sin valor por defecto |
+| `MONGO_PASSWORD` | Contraseña root de MongoDB y contraseña de la URI | Requerida; sin valor por defecto |
+| `MONGO_DATABASE` | Base de datos de la aplicación | Requerida; el ejemplo trae `auth_local` |
+| `MONGODB_URI` | URI de conexión que construye Compose y recibe Auth | La arma `docker-compose.yml`; no se define en `.env` |
+| `MONGO_URI` | Nombre con el que Spring lee la conexión (`spring.data.mongodb.uri`) | Alias de `MONGODB_URI`, mismo valor |
+
+Compose genera
+`mongodb://<MONGO_USER>:<MONGO_PASSWORD>@mongodb:27017/<MONGO_DATABASE>?authSource=admin` y la
+expone como `MONGODB_URI` y `MONGO_URI`. Fuera de Compose, la URI debe usar las mismas credenciales y
+host `localhost`. Usar solo letras y dígitos en las credenciales: los caracteres reservados de una URI
+requerirían codificación porcentual. No hay URI, credenciales ni base por defecto: si falta una
+variable obligatoria, Compose falla antes de arrancar. Arranque, diagnóstico y reset de datos de demo
+en [`delivery/runbook-mongodb-local.md`](../../delivery/runbook-mongodb-local.md).
+
+### Resto de la configuración
+
+Las variables de conexión a MongoDB (`MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DATABASE`, `MONGODB_URI`,
+`MONGO_URI`) están en la sección anterior.
+
 | Variable / propiedad | Para qué | Valor por defecto |
 |---|---|---|
-| `MONGO_URI` | URI de conexión a MongoDB | Sin valor: obligatoria |
-| `MONGO_DATABASE` | Nombre de la base de datos | Sin valor: obligatoria |
 | `JWT_SECRET` | Clave HMAC-SHA256 para firmar los JWT; mínimo 32 bytes | Sin valor: obligatoria |
 | `JWT_EXPIRATION_MS` | Vigencia del JWT en milisegundos | `86400000` (24 horas) |
 | `PORT` | Puerto HTTP del servicio | `8080` |
@@ -97,9 +129,9 @@ desarrollo si no se define otra. El detalle de Compose, CI, Helm y despliegue es
 | `springdoc.swagger-ui.enabled` | Swagger UI | `false` en el perfil `prod` |
 | `springdoc.api-docs.enabled` | Endpoint `/v3/api-docs` | `false` en el perfil `prod` |
 
-`JWT_SECRET` debe ser privada y distinta por entorno: no versionar valores reales. En desarrollo se
-puede usar la clave pública de `.env.example`; los tests usan la fixture pública de
-`src/test/resources/application.yml`.
+`JWT_SECRET` debe ser privada y distinta por entorno: no versionar valores reales. `.env.example` la
+entrega vacía; generar una clave local de desarrollo y no reutilizarla fuera de ese entorno. Los
+tests usan la fixture pública de `src/test/resources/application.yml`.
 
 Perfiles: `dev` y `docker` crean el índice único de email automáticamente; `prod` lo mantiene
 desactivado y el índice se crea con el script de operación descrito en `delivery/devops-local.md`.
@@ -300,6 +332,7 @@ MongoDB compartido por la JVM.
 | [`delivery/qa-manual.md`](../../delivery/qa-manual.md) | Cómo importar y correr Postman/Bruno |
 | [`delivery/openapi/openapi.json`](../../delivery/openapi/openapi.json) | Especificación OpenAPI generada por el build |
 | [`delivery/testing.md`](../../delivery/testing.md) | Tests locales con Testcontainers y diagnóstico de Docker |
+| [`delivery/runbook-mongodb-local.md`](../../delivery/runbook-mongodb-local.md) | Arranque, diagnóstico, persistencia y reset de MongoDB local |
 | [`delivery/devops-local.md`](../../delivery/devops-local.md) | Docker, CI y despliegue |
 | [`specs/auth/persistencia.md`](../../specs/auth/persistencia.md) | Requisitos de negocio (fuente) |
 | [`specs/auth/arquitectura.md`](../../specs/auth/arquitectura.md) | Diseño técnico de referencia |
