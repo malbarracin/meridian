@@ -1,0 +1,347 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "Auth Service API",
+    "description" : "Registro y consulta de los datos públicos de usuarios con persistencia en MongoDB. El email se normaliza antes de guardarse y la contraseña solo se almacena como hash. Los errores usan el contrato uniforme code/message/details/timestamp.",
+    "version" : "1.0"
+  },
+  "servers" : [ {
+    "url" : "http://localhost:8080",
+    "description" : "Entorno local"
+  } ],
+  "tags" : [ {
+    "name" : "Usuarios",
+    "description" : "Registro y consulta de los datos públicos de usuarios"
+  } ],
+  "paths" : {
+    "/api/v1/users" : {
+      "post" : {
+        "tags" : [ "Usuarios" ],
+        "summary" : "Registrar usuario",
+        "description" : "Crea un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Devuelve únicamente los datos públicos del usuario creado.",
+        "operationId" : "registerUser",
+        "requestBody" : {
+          "description" : "Datos del usuario a registrar.",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/RegisterRequest"
+              },
+              "examples" : {
+                "Alta válida" : {
+                  "summary" : "Registro con datos válidos",
+                  "description" : "Alta válida",
+                  "value" : {
+                    "name" : "Ana Pérez",
+                    "email" : "ana.perez@example.com",
+                    "password" : "password123"
+                  }
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "description" : "Usuario registrado",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                },
+                "examples" : {
+                  "Usuario creado" : {
+                    "description" : "Usuario creado",
+                    "value" : {
+                      "id" : "6710f3a2c9e77c0012345678",
+                      "name" : "Ana Pérez",
+                      "email" : "ana.perez@example.com",
+                      "createdAt" : "2026-10-22T10:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Datos inválidos o JSON mal formado",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "Validación" : {
+                    "$ref" : "#/components/examples/ValidationError"
+                  },
+                  "Solicitud mal formada" : {
+                    "$ref" : "#/components/examples/BadRequest"
+                  }
+                }
+              }
+            }
+          },
+          "409" : {
+            "description" : "El email ya está registrado",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "Email duplicado" : {
+                    "$ref" : "#/components/examples/DuplicateEmail"
+                  }
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Error interno",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "Error interno" : {
+                    "$ref" : "#/components/examples/InternalError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}" : {
+      "get" : {
+        "tags" : [ "Usuarios" ],
+        "summary" : "Obtener usuario por id",
+        "description" : "Devuelve los datos públicos de un usuario existente. No expone la contraseña ni su hash.",
+        "operationId" : "getUser",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "description" : "Identificador del documento en MongoDB.",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "example" : "6710f3a2c9e77c0012345678"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Usuario encontrado",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/UserResponse"
+                },
+                "examples" : {
+                  "Usuario encontrado" : {
+                    "description" : "Usuario encontrado",
+                    "value" : {
+                      "id" : "6710f3a2c9e77c0012345678",
+                      "name" : "Ana Pérez",
+                      "email" : "ana.perez@example.com",
+                      "createdAt" : "2026-10-22T10:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404" : {
+            "description" : "Usuario no encontrado",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "Usuario inexistente" : {
+                    "$ref" : "#/components/examples/NotFound"
+                  }
+                }
+              }
+            }
+          },
+          "500" : {
+            "description" : "Error interno",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                },
+                "examples" : {
+                  "Error interno" : {
+                    "$ref" : "#/components/examples/InternalError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "RegisterRequest" : {
+        "type" : "object",
+        "description" : "Datos necesarios para registrar un usuario.",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "description" : "Nombre del usuario.",
+            "example" : "Ana Pérez",
+            "minLength" : 1
+          },
+          "email" : {
+            "type" : "string",
+            "format" : "email",
+            "description" : "Email del usuario. Se acepta cualquier variante de mayúsculas y espacios: el servicio guarda la versión normalizada.",
+            "example" : "ana.perez@example.com",
+            "minLength" : 1
+          },
+          "password" : {
+            "type" : "string",
+            "description" : "Contraseña en texto plano de al menos 8 caracteres. Solo se usa para generar el hash BCrypt que se persiste.",
+            "example" : "password123",
+            "maxLength" : 2147483647,
+            "minLength" : 8
+          }
+        },
+        "required" : [ "email", "name", "password" ]
+      },
+      "UserResponse" : {
+        "type" : "object",
+        "description" : "Datos públicos del usuario, sin contraseña ni hash.",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "description" : "Identificador del documento en MongoDB.",
+            "example" : "6710f3a2c9e77c0012345678"
+          },
+          "name" : {
+            "type" : "string",
+            "description" : "Nombre del usuario.",
+            "example" : "Ana Pérez"
+          },
+          "email" : {
+            "type" : "string",
+            "description" : "Email normalizado con trim y minúsculas.",
+            "example" : "ana.perez@example.com"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Fecha de alta en ISO-8601 UTC.",
+            "example" : "2026-10-22T10:00:00Z"
+          }
+        },
+        "required" : [ "createdAt", "email", "id", "name" ]
+      },
+      "ErrorResponse" : {
+        "type" : "object",
+        "description" : "Respuesta de error uniforme de la API.",
+        "properties" : {
+          "code" : {
+            "type" : "string",
+            "description" : "Código estable del contrato de errores.",
+            "enum" : [ "VALIDATION_ERROR", "BAD_REQUEST", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR" ],
+            "example" : "VALIDATION_ERROR"
+          },
+          "message" : {
+            "type" : "string",
+            "description" : "Mensaje legible, sin stacktrace ni datos internos.",
+            "example" : "La solicitud tiene datos inválidos"
+          },
+          "details" : {
+            "type" : "array",
+            "description" : "Detalle por campo; arreglo vacío si no aplica.",
+            "items" : {
+              "$ref" : "#/components/schemas/FieldError"
+            }
+          },
+          "timestamp" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Momento del error en ISO-8601 UTC.",
+            "example" : "2026-10-22T10:05:00Z"
+          }
+        },
+        "required" : [ "code", "details", "message", "timestamp" ]
+      },
+      "FieldError" : {
+        "type" : "object",
+        "description" : "Campo rechazado por la validación de la solicitud.",
+        "properties" : {
+          "field" : {
+            "type" : "string",
+            "description" : "Nombre del campo rechazado.",
+            "example" : "email"
+          },
+          "message" : {
+            "type" : "string",
+            "description" : "Motivo del rechazo.",
+            "example" : "must be a well-formed email address"
+          }
+        },
+        "required" : [ "field", "message" ]
+      }
+    },
+    "examples" : {
+      "ValidationError" : {
+        "summary" : "Datos inválidos",
+        "value" : {
+          "code" : "VALIDATION_ERROR",
+          "message" : "La solicitud tiene datos inválidos",
+          "details" : [ {
+            "field" : "email",
+            "message" : "must be a well-formed email address"
+          } ],
+          "timestamp" : "2026-10-22T10:05:00Z"
+        }
+      },
+      "BadRequest" : {
+        "summary" : "Solicitud mal formada",
+        "value" : {
+          "code" : "BAD_REQUEST",
+          "message" : "Solicitud inválida",
+          "details" : [ ],
+          "timestamp" : "2026-10-22T10:05:00Z"
+        }
+      },
+      "DuplicateEmail" : {
+        "summary" : "Email ya registrado",
+        "value" : {
+          "code" : "CONFLICT",
+          "message" : "Email ya registrado",
+          "details" : [ ],
+          "timestamp" : "2026-10-22T10:05:00Z"
+        }
+      },
+      "NotFound" : {
+        "summary" : "Usuario inexistente",
+        "value" : {
+          "code" : "NOT_FOUND",
+          "message" : "Usuario no encontrado por id: 6710f3a2c9e77c00ffffffff",
+          "details" : [ ],
+          "timestamp" : "2026-10-22T10:05:00Z"
+        }
+      },
+      "InternalError" : {
+        "summary" : "Error interno",
+        "value" : {
+          "code" : "INTERNAL_ERROR",
+          "message" : "Error interno",
+          "details" : [ ],
+          "timestamp" : "2026-10-22T10:05:00Z"
+        }
+      }
+    }
+  }
+}
