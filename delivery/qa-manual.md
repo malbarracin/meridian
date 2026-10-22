@@ -33,6 +33,9 @@ los endpoints reales del código y usan los mismos ejemplos que Swagger y `deliv
 3. La colección usa `baseUrl = http://localhost:8080`. Si el servicio corre en otro puerto, cambiar
    la variable `baseUrl` en el entorno.
 
+Docker no es necesario para probar la API con Postman o Bruno: solo hace falta para la suite
+automatizada con Testcontainers (ver `delivery/testing.md`).
+
 ## Postman
 
 ### Importar
@@ -43,31 +46,38 @@ los endpoints reales del código y usan los mismos ejemplos que Swagger y `deliv
 4. Seleccionar el entorno **auth-service - local** en el selector superior derecho.
 
 La colección trae variables propias (`baseUrl`, `userId`, `userEmail`, `authToken`). El pedido de
-alta genera un email único por corrida, guarda el `id` en `userId` y el JWT en `authToken`; por eso no
-hace falta editar nada antes de correr el Collection Runner.
+alta genera un email único por corrida, guarda el `id` en `userId` y el JWT en `authToken`; el login
+vuelve a guardar su JWT en `authToken` y `GET /me` lo usa como Bearer. Por eso no hace falta editar
+nada antes de correr el Collection Runner.
 
 ### Orden y resultado esperado
 
 | # | Carpeta / pedido | Método y ruta | Resultado esperado |
 |---|---|---|---|
-| 1 | 1. Flujo feliz → Registrar usuario | `POST /api/v1/users` | `201`, `AuthResponse`: `user` (`id`, `name`, `email`, `createdAt`) y `token` no vacío de 3 segmentos; guarda `userId` y `authToken` |
-| 2 | 1. Flujo feliz → Consultar usuario por id | `GET /api/v1/users/{{userId}}` | `200`, mismo usuario, sin `password` ni `passwordHash` |
-| 3 | 2. Errores → Alta con email inválido | `POST /api/v1/users` | `400`, `code = VALIDATION_ERROR`, `details[0].field = email` |
-| 4 | 2. Errores → Alta con JSON mal formado | `POST /api/v1/users` | `400`, `code = BAD_REQUEST`, `details` vacío |
-| 5 | 2. Errores → Alta con email duplicado | `POST /api/v1/users` | `409`, `code = CONFLICT`, mensaje `Email ya registrado` |
-| 6 | 2. Errores → Consultar usuario inexistente | `GET /api/v1/users/6710f3a2c9e77c00ffffffff` | `404`, `code = NOT_FOUND` |
-| 7 | 3. Salud → Health check | `GET /actuator/health` | `200`, `status = UP` |
+| 1 | 1. Flujo feliz → Registrar usuario | `POST /api/v1/users` | `201`, `AuthResponse`: `user` (`id`, `name`, `email`, `createdAt`) y `token` no vacío de 3 segmentos; guarda `userId`, `userEmail` y `authToken` |
+| 2 | 1. Flujo feliz → Iniciar sesión | `POST /api/v1/auth/login` | `200`, `AuthResponse` con el mismo `user.id` y `token` de 3 segmentos; guarda `authToken` |
+| 3 | 1. Flujo feliz → Consultar usuario por id | `GET /api/v1/users/{{userId}}` | `200`, mismo usuario, sin `password` ni `passwordHash` |
+| 4 | 1. Flujo feliz → Consultar mi perfil | `GET /api/v1/users/me` con `Bearer {{authToken}}` | `200`, perfil del token: `id = {{userId}}`, sin `password` ni `passwordHash` |
+| 5 | 2. Errores → Alta con email inválido | `POST /api/v1/users` | `400`, `code = VALIDATION_ERROR`, `details[0].field = email` |
+| 6 | 2. Errores → Alta con JSON mal formado | `POST /api/v1/users` | `400`, `code = BAD_REQUEST`, `details` vacío |
+| 7 | 2. Errores → Alta con email duplicado | `POST /api/v1/users` | `409`, `code = CONFLICT`, mensaje `Email ya registrado` |
+| 8 | 2. Errores → Consultar usuario inexistente | `GET /api/v1/users/6710f3a2c9e77c00ffffffff` | `404`, `code = NOT_FOUND` |
+| 9 | 2. Errores → Login con credenciales inválidas | `POST /api/v1/auth/login` con contraseña incorrecta | `401`, `code = UNAUTHORIZED`, mensaje `Credenciales inválidas`, `details` vacío |
+| 10 | 2. Errores → Perfil sin token | `GET /api/v1/users/me` sin `Authorization` | `401`, `code = UNAUTHORIZED`, `details` vacío |
+| 11 | 3. Salud → Health check | `GET /actuator/health` | `200`, `status = UP` |
 
-**Importante:** el pedido 5 reutiliza el email creado en el pedido 1. Si se ejecuta solo (sin el alta
-previa en la misma corrida), puede devolver `400` en lugar de `409` porque `{{userEmail}}` está vacío.
-Correr la colección completa en orden.
+**Importante:** el pedido 7 reutiliza el email creado en el pedido 1 y el pedido 4 reutiliza su
+token. Si se ejecutan sueltos, el duplicado puede devolver `400` porque `{{userEmail}}` está vacío y
+`/me` puede devolver `401` porque `{{authToken}}` no existe. Correr la colección completa en orden.
 
-### JWT
+### JWT y perfil autenticado
 
-El alta devuelve `token` además del perfil `user`. Los tests verifican que sea un string no vacío con
-tres segmentos separados por puntos y que no aparezca `password` ni `passwordHash` en la respuesta.
-El servicio no expone un endpoint que consuma el token: se emite para que otros servicios lo usen
-como `Authorization: Bearer <token>`. No copiar tokens reales a tickets, capturas ni repositorios.
+El alta y el login devuelven `token` además del perfil `user`. Los tests verifican el status (`201` y
+`200`), que el token sea un string no vacío con tres segmentos separados por puntos, que `user.id`
+coincida con el registrado y que no aparezca `password` ni `passwordHash` en la respuesta. El pedido
+`GET /api/v1/users/me` usa `Authorization: Bearer {{authToken}}` y comprueba que devuelve el perfil
+del `id` registrado. Los errores de login y de token ausente o inválido se validan con `401
+UNAUTHORIZED` y `details` vacío. No copiar tokens reales a tickets, capturas ni repositorios.
 
 ### Collection Runner
 
@@ -98,8 +108,9 @@ newman run delivery/postman/auth-service.postman_collection.json `
    `1-flujo-feliz` → `2-errores` → `3-salud`.
 
 Los pedidos, nombres, orden y datos son los mismos que en Postman. El alta genera `userEmail` y
-guarda `userId` y `authToken` en variables de la corrida; el pedido de email duplicado depende de esa
-alta previa. El JWT del ejemplo es un marcador: el valor real cambia en cada ejecución.
+guarda `userId` y `authToken` en variables de la corrida; el login y `/me` reutilizan esas variables,
+y el pedido de email duplicado depende del alta previa. El JWT del ejemplo es un marcador: el valor
+real cambia en cada ejecución.
 
 ### Importar desde Postman u OpenAPI
 
@@ -137,4 +148,6 @@ genera un email nuevo en cada corrida.
 | `health` devuelve `DOWN` | MongoDB no accesible | `MONGO_URI`, contenedor de Mongo y credenciales del entorno |
 | El alta devuelve `409` al repetir | El email ya existe | Usar otro email o limpiar la base de prueba |
 | El pedido de duplicado devuelve `400` | Se ejecutó sin el alta previa | Correr la colección completa en orden |
+| `GET /me` devuelve `401` | Se ejecutó sin login/alta previa o el token venció | Correr la colección completa en orden o repetir el login |
+| `verify` falla con `Could not find a valid Docker environment` | Docker no está accesible para Maven | Arrancar Docker y revisar `delivery/testing.md` |
 | Swagger UI no abre en `prod` | Deshabilitado a propósito | Usar perfil local/dev o `delivery/openapi/` |

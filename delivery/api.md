@@ -21,7 +21,7 @@ Los ejemplos usan el mismo usuario que Swagger, Postman y Bruno:
 
 - Request y response: `Content-Type: application/json`.
 - Fechas: ISO-8601 en UTC (`2026-10-22T10:00:00Z`).
-- La contraseña viaja en texto plano solo en el alta; el servicio la guarda como hash BCrypt.
+- La contraseña viaja en texto plano solo en el alta y en el login; el servicio la guarda como hash BCrypt.
 - El email se normaliza (trim y minúsculas) antes de persistirse.
 - Si se repite el mismo email, la API responde `409 CONFLICT`; para volver a probar el alta usar un
   email distinto.
@@ -71,8 +71,9 @@ Respuesta `201 Created` (`AuthResponse`):
 - `user`: perfil público del usuario persistido. No incluye `password` ni `passwordHash`.
 - `token`: JWT firmado con HS256. Claims `sub` (id del usuario), `email` (normalizado), `iat` y
   `exp` (`JWT_EXPIRATION_MS`). El valor de este ejemplo es un marcador, no un token real.
-- Uso previsto: `Authorization: Bearer <token>` en los servicios que consuman el JWT. Este servicio
-  solo emite y valida tokens internamente; no expone un endpoint de validación.
+- Uso previsto: `Authorization: Bearer <token>` en `GET /api/v1/users/me` y en los servicios que
+  consuman el JWT. No hay un endpoint dedicado a validar tokens: la validación ocurre al invocar
+  `GET /api/v1/users/me`.
 - La cabecera `Location` apunta a `GET /api/v1/users/{id}` con el id creado.
 
 ### Errores posibles
@@ -145,6 +146,119 @@ curl -i -X POST http://localhost:8080/api/v1/users \
 }
 ```
 
+## POST /api/v1/auth/login — iniciar sesión
+
+Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde el mismo `AuthResponse`
+del alta:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "ana.perez@example.com",
+    "password": "password123"
+  }'
+```
+
+Respuesta `200 OK` (`AuthResponse`):
+
+```json
+{
+  "user": {
+    "id": "6710f3a2c9e77c0012345678",
+    "name": "Ana Pérez",
+    "email": "ana.perez@example.com",
+    "createdAt": "2026-10-22T10:00:00Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
+}
+```
+
+- El email se normaliza (trim y minúsculas) antes de buscar al usuario, igual que en el alta.
+- `token` es un JWT HS256 con los mismos claims del alta (`sub`, `email`, `iat`, `exp`). El valor de
+  este ejemplo es un marcador: usar el token real que devuelve la respuesta.
+- Guardar el token para el pedido siguiente (`GET /api/v1/users/me`).
+
+### Errores posibles
+
+`400 VALIDATION_ERROR` — email mal formado, email o contraseña en blanco o ausentes: mismo JSON
+genérico de validación que en el alta (ver arriba).
+
+`401 UNAUTHORIZED` — credenciales incorrectas. El mismo error se devuelve si el email no existe o si
+la contraseña no coincide, para no revelar qué parte falló:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ana.perez@example.com","password":"otraPassword999"}'
+```
+
+```json
+{
+  "code": "UNAUTHORIZED",
+  "message": "Credenciales inválidas",
+  "details": [],
+  "timestamp": "2026-10-22T10:05:00Z"
+}
+```
+
+`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del alta.
+
+## GET /api/v1/users/me — perfil autenticado
+
+Devuelve el perfil persistido del usuario identificado por el `sub` del JWT. Requiere la cabecera
+`Authorization` con el token emitido por el alta o el login:
+
+```bash
+curl -i http://localhost:8080/api/v1/users/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Respuesta `200 OK` (`UserResponse`):
+
+```json
+{
+  "id": "6710f3a2c9e77c0012345678",
+  "name": "Ana Pérez",
+  "email": "ana.perez@example.com",
+  "createdAt": "2026-10-22T10:00:00Z"
+}
+```
+
+- No incluye `password` ni `passwordHash`.
+- El servicio verifica firma HS256, expiración y `sub`; no hay endpoint separado de validación.
+
+### Errores posibles
+
+`401 UNAUTHORIZED` — cabecera ausente, sin el prefijo `Bearer`, token mal formado, firma inválida o
+token vencido:
+
+```bash
+curl -i http://localhost:8080/api/v1/users/me
+```
+
+```json
+{
+  "code": "UNAUTHORIZED",
+  "message": "Credenciales inválidas",
+  "details": [],
+  "timestamp": "2026-10-22T10:05:00Z"
+}
+```
+
+`404 NOT_FOUND` — el JWT es válido pero el usuario ya no existe:
+
+```json
+{
+  "code": "NOT_FOUND",
+  "message": "Usuario no encontrado por id: 6710f3a2c9e77c0012345678",
+  "details": [],
+  "timestamp": "2026-10-22T10:05:00Z"
+}
+```
+
+`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del alta.
+
 ## GET /api/v1/users/{id} — consultar usuario
 
 Usar el `id` devuelto por el alta:
@@ -202,6 +316,7 @@ Respuesta `200 OK`:
 - Especificación completa: `delivery/openapi/openapi.json` y `delivery/openapi/openapi.yaml`.
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Colecciones: `delivery/postman/` y `delivery/bruno/auth-service/`.
+- Tests locales con Testcontainers: `delivery/testing.md`.
 - Contrato de errores: `src/main/java/com/meridian/users/exception/GlobalExceptionHandler.java`.
 - Emisión y validación de JWT: `src/main/java/com/meridian/users/user/service/JwtService.java`.
 - Configuración JWT: `src/main/java/com/meridian/users/config/JwtConfig.java` y `application.yml`.

@@ -34,12 +34,14 @@ com.meridian.users
 │   ├── ErrorCode.java              # enum de códigos estables
 │   ├── GlobalExceptionHandler.java # @RestControllerAdvice
 │   ├── NotFoundException.java      # base abstracta
-│   └── ConflictException.java      # base abstracta
+│   ├── ConflictException.java      # base abstracta
+│   └── UnauthorizedException.java  # base para credenciales/JWT inválidos
 └── user/
     ├── controller/
-    │   └── UserController.java     # @RequestMapping("/api/v1/users")
+    │   ├── AuthController.java     # @RequestMapping("/api/v1/auth") → POST /login
+    │   └── UserController.java     # @RequestMapping("/api/v1/users") → GET /me y /{id}, POST
     ├── service/
-    │   ├── UserService.java        # reglas de registro y consulta
+    │   ├── UserService.java        # registro, login y consulta
     │   └── JwtService.java         # emisión y validación HS256
     ├── repository/
     │   └── UserRepository.java     # MongoRepository<User, String>
@@ -49,12 +51,18 @@ com.meridian.users
     │   └── User.java               # @Document(collection = "users")
     ├── dto/
     │   ├── RegisterRequest.java    # name, email, password
+    │   ├── LoginRequest.java       # email, password
     │   ├── UserResponse.java       # id, name, email, createdAt
     │   └── AuthResponse.java       # user + token
     └── exception/
         ├── DuplicateUserException.java
+        ├── InvalidCredentialsException.java
         └── UserNotFoundException.java
 ```
+
+La suite de integración H2.3 vive en `src/test/java/com/meridian/users/` (`AuthIntegrationTest` y
+`MongoTestContainer`) y en `src/test/java/com/meridian/users/user/integration/`
+(`LoginIntegrationTest`, `ProfileIntegrationTest`).
 
 Cada módulo de dominio usa subpaquetes por capa (`controller`, `service`, `repository`, `mapper`,
 `entity`, `dto`); el paquete `exception/` de la raíz concentra el contrato de error compartido.
@@ -63,16 +71,16 @@ Cada módulo de dominio usa subpaquetes por capa (`controller`, `service`, `repo
 
 | Capa | Clase | Responsabilidad | No hace |
 |---|---|---|---|
-| Controller | `UserController` | Recibe HTTP, valida con `@Valid`, devuelve status y DTO | Reglas de negocio ni mapeo campo a campo |
-| Service | `UserService` | Normaliza email, verifica unicidad, hashea contraseña, arma la entidad, consulta y pide el JWT | Conocer HTTP |
+| Controller | `UserController`, `AuthController` | Recibe HTTP, valida con `@Valid`, lee `Authorization`, devuelve status y DTO | Reglas de negocio ni mapeo campo a campo |
+| Service | `UserService` | Normaliza email, verifica unicidad, hashea contraseña, valida credenciales, resuelve el perfil por JWT y pide el JWT | Conocer HTTP |
 | Service | `JwtService` | Firma y valida tokens HS256 con `JwtConfig` | Reglas de negocio de usuarios |
 | Repository | `UserRepository` | Persistencia en MongoDB y búsqueda por email | Reglas de negocio |
 | Mapper | `UserMapper` | Convierte `User` → `UserResponse` (MapStruct) | Reglas de negocio |
 | Entity | `User` | Documento persistido en la colección `users` | Exponerse por la API |
-| DTO | `RegisterRequest`, `UserResponse`, `AuthResponse` | Contrato HTTP de entrada y salida | Lógica de negocio |
+| DTO | `RegisterRequest`, `LoginRequest`, `UserResponse`, `AuthResponse` | Contrato HTTP de entrada y salida | Lógica de negocio |
 
-`User` no se expone: el controller devuelve `AuthResponse` en el alta (con `UserResponse` embebido y
-el JWT) y `UserResponse` en la consulta. Ninguno incluye `passwordHash`.
+`User` no se expone: el controller devuelve `AuthResponse` en el alta y en el login (con
+`UserResponse` embebido y el JWT) y `UserResponse` en las consultas. Ninguno incluye `passwordHash`.
 
 ## Modelo persistido
 
@@ -89,13 +97,15 @@ Colección MongoDB `users`, documento `User`:
 
 La unicidad de email tiene dos defensas: la verificación `findByEmail` del servicio (409 de dominio)
 y el índice único de MongoDB (`DuplicateKeyException`, también mapeada a 409). El JWT no se persiste:
-se genera al responder cada alta a partir del id y el email del usuario.
+se genera en cada alta y en cada login a partir del id y el email del usuario.
 
 ## Endpoints
 
 | Método | Ruta | Request | Respuesta OK | Errores |
 |---|---|---|---|---|
 | POST | `/api/v1/users` | `RegisterRequest` | `201` + `AuthResponse` (`user` + `token`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 409 `CONFLICT`, 500 `INTERNAL_ERROR` |
+| POST | `/api/v1/auth/login` | `LoginRequest` | `200` + `AuthResponse` (`user` + `token`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 401 `UNAUTHORIZED`, 500 `INTERNAL_ERROR` |
+| GET | `/api/v1/users/me` | `Authorization: Bearer <token>` | `200` + `UserResponse` | 401 `UNAUTHORIZED`, 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
 | GET | `/api/v1/users/{id}` | `id` en el path | `200` + `UserResponse` | 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
 | GET | `/actuator/health` | — | `200` + `{"status":"UP"}` | — |
 
@@ -121,7 +131,38 @@ UserController.registerUser(@Valid RegisterRequest)
 
 El JWT se firma con `jwt.secret` (`JWT_SECRET`, mínimo 32 bytes) y vence según `jwt.expiration-ms`
 (`JWT_EXPIRATION_MS`, 24 horas por defecto). `JwtService.isValid` verifica firma HS256 y expiración;
-no hay endpoint HTTP que valide tokens.
+no hay un endpoint dedicado a validar tokens: la validación ocurre en `GET /api/v1/users/me`.
+
+### POST /api/v1/auth/login
+
+```text
+AuthController.login(@Valid LoginRequest)
+  → UserService.login(LoginRequest)
+      normaliza email: trim + minúsculas
+      UserRepository.findByEmail(email) → si no existe, InvalidCredentialsException (401)
+      PasswordEncoder.matches(password, passwordHash) → si no coincide, InvalidCredentialsException (401)
+      JwtService.generateToken(id, email) → JWT HS256 (sub, email, iat, exp)
+      UserMapper.toResponse(User)
+  ← AuthResponse(UserResponse, token)
+← 200 OK + AuthResponse
+```
+
+El mismo `401 UNAUTHORIZED` con mensaje genérico cubre email inexistente y contraseña incorrecta, para
+no revelar qué parte de la credencial falló.
+
+### GET /api/v1/users/me
+
+```text
+UserController.getMe(Authorization: Bearer <token>)
+  si falta la cabecera o no empieza con "Bearer ", InvalidCredentialsException (401)
+  → UserService.getByToken(token sin prefijo)
+      JwtService.extractUserId(token)
+        verifica firma HS256, expiración y subject → si falla, InvalidCredentialsException (401)
+      UserService.getById(subject)
+        UserRepository.findById(id) → si no existe, UserNotFoundException (404)
+        UserMapper.toResponse(User)
+  ← 200 OK + UserResponse
+```
 
 ### GET /api/v1/users/{id}
 
@@ -157,6 +198,7 @@ todas las respuestas de error:
 |---|---|---|
 | 400 | `VALIDATION_ERROR` | `MethodArgumentNotValidException`, `ConstraintViolationException` |
 | 400 | `BAD_REQUEST` | `IllegalArgumentException`, `HttpMessageNotReadableException`, `MethodArgumentTypeMismatchException`, `MissingServletRequestParameterException` |
+| 401 | `UNAUTHORIZED` | `UnauthorizedException` / `InvalidCredentialsException` (credenciales o JWT inválidos) |
 | 404 | `NOT_FOUND` | `NotFoundException` / `UserNotFoundException` |
 | 409 | `CONFLICT` | `ConflictException` / `DuplicateUserException`, `DuplicateKeyException` de MongoDB |
 | 500 | `INTERNAL_ERROR` | Cualquier otra `Exception`; mensaje genérico |
@@ -196,7 +238,7 @@ Perfiles:
 |---|---|---|
 | `dev` | Se crea automáticamente | Desarrollo local |
 | `docker` | Se crea automáticamente | Docker Compose |
-| `test` | Se crea automáticamente | Tests de integración con Mongo embebido |
+| `test` | Se crea automáticamente | Tests con MongoDB embebido (Flapdoodle) o Testcontainers |
 | `prod` | Desactivado; lo crea el operador | Producción |
 
 En `prod`, Swagger UI y el endpoint de OpenAPI están deshabilitados (`springdoc.swagger-ui.enabled`
@@ -209,13 +251,15 @@ y `springdoc.api-docs.enabled` en `false`).
 | Entidad | `UserTest` | `equals`/`hashCode`/`toString` sin datos sensibles |
 | DTO | `RegisterRequestValidationTest` | Restricciones de Bean Validation |
 | Repositorio | `UserRepositoryTest` | MongoDB embebido, búsqueda y unicidad |
-| Servicio | `UserServiceTest`, `UserRegistrationIntegrationTest` | Normalización, hash, duplicado, JWT, flujo real |
+| Servicio | `UserServiceTest`, `UserRegistrationIntegrationTest` | Normalización, hash, duplicado, login, JWT y flujo real |
 | JWT | `JwtConfigTest`, `JwtServiceTest` | Propiedades, firma, claims, expiración y clave corta |
 | Mapper | `UserMapperTest` | `User` → `UserResponse` |
-| Controller | `UserControllerTest` | `@WebMvcTest`: 201, 400, 404, 409 y contrato |
+| Controller | `UserControllerTest`, `AuthControllerTest`, `ProfileControllerTest` | `@WebMvcTest`: 200/201, 400, 401, 404, 409 y contrato |
 | Contrato de error | `ErrorContractHttpTest`, `GlobalExceptionHandlerTest` | Mapeo HTTP y JSON |
+| Integración H2.3 | `AuthIntegrationTest`, `LoginIntegrationTest`, `ProfileIntegrationTest` | MongoDB 7.0.14 real con Testcontainers (requiere Docker) |
 | Contexto | `UsersApplicationTest` | Arranque con MongoDB embebido |
 | OpenAPI | `OpenApiIntegrationTest`, `OpenApiExportTest` | Publicación y export a `delivery/openapi/` |
 
 JaCoCo exige 80 % de cobertura de líneas en `verify`. Comando de cierre:
-`./mvnw -q -B verify` desde la raíz o `.\mvnw.cmd clean verify` dentro del servicio.
+`./mvnw -q -B verify` desde la raíz o `.\mvnw.cmd clean verify` dentro del servicio. Los tests de
+Testcontainers necesitan el daemon Docker accesible; guía en `delivery/testing.md`.
