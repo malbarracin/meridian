@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -34,38 +37,39 @@ class ErrorContractHttpTest {
     }
 
     @Test
-    @DisplayName("Oculta el mensaje interno de errores inesperados")
+    @DisplayName("Responde 500 con ErrorResponse genérico ante Exception no manejada")
     void hidesUnexpectedError() throws Exception {
         mockMvc.perform(get("/error/unexpected"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.message").value("Error interno"))
+                .andExpect(jsonPath("$.details").isArray())
                 .andExpect(jsonPath("$.details").isEmpty())
-                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+                .andExpect(jsonPath("$.timestamp").isNotEmpty())
+                .andExpect(jsonPath("$.message", not(containsString("secret-provider-token"))));
     }
 
     @Test
-    @DisplayName("Traduce ausencia y conflicto de dominio")
-    void mapsDomainErrors() throws Exception {
-        mockMvc.perform(get("/error/missing"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
-        mockMvc.perform(get("/error/conflict"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("CONFLICT"));
+    @DisplayName("Traduce ausencia de dominio a 404 con cuerpo completo")
+    void mapsNotFound() throws Exception {
+        expectErrorBody(mockMvc.perform(get("/error/missing")), 404, "NOT_FOUND", "No existe el recurso");
+    }
+
+    @Test
+    @DisplayName("Traduce conflicto de dominio a 409 con cuerpo completo")
+    void mapsConflict() throws Exception {
+        expectErrorBody(mockMvc.perform(get("/error/conflict")), 409, "CONFLICT", "El recurso ya existe");
     }
 
     @Test
     @DisplayName("Rechaza parámetros ausentes, tipos inválidos y argumentos inválidos")
     void rejectsBadRequests() throws Exception {
-        mockMvc.perform(get("/error/parameter"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
-        mockMvc.perform(get("/error/parameter").param("number", "abc"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
-        mockMvc.perform(get("/error/argument"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
-        mockMvc.perform(post("/error/body").contentType(MediaType.APPLICATION_JSON).content("{"))
-                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+        expectBadRequest(mockMvc.perform(get("/error/parameter")));
+        expectBadRequest(mockMvc.perform(get("/error/parameter").param("number", "abc")));
+        expectBadRequest(mockMvc.perform(get("/error/argument")));
+        expectBadRequest(mockMvc.perform(post("/error/body")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{")));
     }
 
     @Test
@@ -74,7 +78,11 @@ class ErrorContractHttpTest {
         mockMvc.perform(post("/error/body").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.details[0].field").value("name"));
+                .andExpect(jsonPath("$.message").value("La solicitud tiene datos inválidos"))
+                .andExpect(jsonPath("$.details").isArray())
+                .andExpect(jsonPath("$.details[0].field").value("name"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 
     @Test
@@ -83,7 +91,25 @@ class ErrorContractHttpTest {
         mockMvc.perform(get("/error/constraint"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.details[0].field").value("number"));
+                .andExpect(jsonPath("$.message").value("La solicitud tiene datos inválidos"))
+                .andExpect(jsonPath("$.details").isArray())
+                .andExpect(jsonPath("$.details[0].field").value("number"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+    }
+
+    private static void expectBadRequest(ResultActions actions) throws Exception {
+        expectErrorBody(actions, 400, "BAD_REQUEST", "Solicitud inválida");
+    }
+
+    private static void expectErrorBody(ResultActions actions, int status, String code, String message)
+            throws Exception {
+        actions.andExpect(status().is(status))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(jsonPath("$.message").value(message))
+                .andExpect(jsonPath("$.details").isArray())
+                .andExpect(jsonPath("$.details").isEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
     }
 
     record Body(@NotBlank String name) {
@@ -102,12 +128,14 @@ class ErrorContractHttpTest {
 
         @GetMapping("/error/missing")
         String missing() {
-            throw new NotFoundException("No existe el recurso") { };
+            throw new NotFoundException("No existe el recurso") {
+            };
         }
 
         @GetMapping("/error/conflict")
         String conflict() {
-            throw new ConflictException("El recurso ya existe") { };
+            throw new ConflictException("El recurso ya existe") {
+            };
         }
 
         @GetMapping("/error/argument")

@@ -27,7 +27,17 @@ class DashboardApplicationTest {
     void loadsContextInMockMode() {
         Map<String, WebClient> clients = context.getBeansOfType(WebClient.class);
         assertThat(clients).hasSize(6);
+        assertThat(clients.keySet()).containsExactlyInAnyOrder(
+                "dolarApiWebClient",
+                "frankfurterWebClient",
+                "coinGeckoWebClient",
+                "finnhubWebClient",
+                "newsApiWebClient",
+                "hnAlgoliaWebClient");
         assertThat(environment.getProperty("dashboard.use-mock", Boolean.class)).isTrue();
         assertThat(environment.getProperty("server.port", Integer.class)).isEqualTo(8081);
+        assertThat(environment.getProperty("dashboard.cache.ttl-seconds", Integer.class)).isEqualTo(60);
+        assertThat(environment.getProperty("dashboard.providers.finnhub.api-key")).isEmpty();
+        assertThat(environment.getProperty("dashboard.providers.news-api.api-key")).isEmpty();
     }
 }
