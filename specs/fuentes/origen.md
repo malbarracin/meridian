@@ -1,8 +1,8 @@
 ---
 title: Origen de los requisitos — Meridian
-status: aprobada
+status: borrador
 source: https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7
-updated: 2026-10-22T20:07:51.756Z
+updated: 2026-10-22T23:07:23.649Z
 ---
 
 # Origen de los requisitos
@@ -12,7 +12,7 @@ updated: 2026-10-22T20:07:51.756Z
 | Proyecto | Meridian |
 | Fuente | Notion |
 | Link raíz | https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7 |
-| Actualizado | 2026-10-22 |
+| Actualizado | 2026-10-23 |
 
 ## Requisito → fuente
 
@@ -46,6 +46,17 @@ updated: 2026-10-22T20:07:51.756Z
 | Configuración por variables de entorno (Compose) | infra/mongodb-local | H2.4 — Sección 2. Alcance ("Variables MONGODB_URI / database / credenciales vía entorno") / Sección 3. CA ("Secrets no versionados") |
 | Persistencia de datos de demo | infra/mongodb-local | H2.4 — Sección 3. CA ("Usuario registrado sobrevive al reinicio de Auth") |
 | Runbook de diagnóstico y reset | infra/mongodb-local | H2.4 — Sección 2. Alcance ("Documentar reset de datos de demo") / Sección 3. CA ("Runbook con diagnóstico y reset") |
+| Adapter Dólar / FX (DolarApi) | dashboard/apis-publicas | H8 — Sección 3.1 ("DolarApi GET /v1/dolares, mapear oficial y blue") |
+| Adapter FX internacional (Frankfurter) | dashboard/apis-publicas | H8 — Sección 3.1 ("Frankfurter ECB, opcional extra") |
+| Adapter Cripto precio actual (CoinGecko) | dashboard/apis-publicas | H8 — Sección 3.2 ("CoinGecko simple/price BTC+ETH, cache ≥60s") |
+| Adapter Cripto serie histórica 7d (CoinGecko) | dashboard/apis-publicas | H8 — Sección 3.2 ("CoinGecko coins/{id}/market_chart 7d") |
+| Adapter Bolsa quote (Finnhub) | dashboard/apis-publicas | H8 — Sección 3.3 ("Finnhub /quote AAPL, MSFT, SPY; FINNHUB_API_KEY") |
+| Adapter Bolsa velas históricas (Finnhub) | dashboard/apis-publicas | H8 — Sección 3.3 ("Finnhub /stock/candle OHLC; FINNHUB_API_KEY") |
+| Adapter Noticias IA/Tech — NewsAPI | dashboard/apis-publicas | H8 — Sección 3.4 ("NewsAPI /v2/everything AI+tech, pageSize=8; NEWS_API_KEY") |
+| Adapter Noticias IA/Tech — fallback HN Algolia | dashboard/apis-publicas | H8 — Sección 3.4 ("HN Algolia /search?query=AI%20technology, sin key; mapear title/url/created_at") |
+| Cache TTL y modo degraded | dashboard/apis-publicas | H8 — Sección 2 (Principios) y Sección 5 CA ("Cache TTL y degraded[] funcionan") |
+| Modo demo offline (DASHBOARD_USE_MOCK) | dashboard/apis-publicas | H8 — Sección 4 (DASHBOARD_USE_MOCK=false) y Sección 5 CA ("DASHBOARD_USE_MOCK=true permite demo offline") |
+| Configuración por variables de entorno (Dashboard) | dashboard/apis-publicas | H8 — Sección 4 (FINNHUB_API_KEY, NEWS_API_KEY, DASHBOARD_CACHE_TTL_SECONDS, DASHBOARD_USE_MOCK) |
 
 ## Fuentes visitadas
 
@@ -56,3 +67,4 @@ updated: 2026-10-22T20:07:51.756Z
 | https://app.notion.com/p/3ac75bb08ca7819ea1bfe51ac5132d15 | 🧪 H2.3 — Tests Auth con MongoDB | Fuente principal de auth/tests-auth-mongodb |
 | https://app.notion.com/p/3ac75bb08ca781a68ee5d18db3da7d71 | 🐳 H2.4 — MongoDB en entorno local | Fuente principal de infra/mongodb-local |
 | https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7 | 🚀 Meridian — Requisitos de producto (Login + Dashboard mercados) | Contexto de producto y alcance global |
+| https://app.notion.com/p/3ac75bb08ca781f5b410e46a6ec7143d | 📈 H8 — Catálogo APIs públicas (Dashboard Meridian) | Fuente principal de dashboard/apis-publicas |
