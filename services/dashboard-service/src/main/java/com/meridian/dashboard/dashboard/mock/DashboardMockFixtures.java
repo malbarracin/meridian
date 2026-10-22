@@ -1,18 +1,30 @@
 package com.meridian.dashboard.dashboard.mock;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
-import com.meridian.dashboard.dashboard.dto.DolarResponse;
-import com.meridian.dashboard.dashboard.dto.FxRateResponse;
 import com.meridian.dashboard.dashboard.dto.CandleResponse;
+import com.meridian.dashboard.dashboard.dto.DolarResponse;
 import com.meridian.dashboard.dashboard.dto.EquityQuoteResponse;
+import com.meridian.dashboard.dashboard.dto.FxRateResponse;
+import com.meridian.dashboard.dashboard.dto.NewsArticleResponse;
 import com.meridian.dashboard.dashboard.dto.OhlcPoint;
 
 /** Datos de demostración estáticos; no representan cotizaciones actuales. */
 public final class DashboardMockFixtures {
 
     private DashboardMockFixtures() {
+    }
+
+    /** @return noticias ficticias estáticas para la demostración offline. */
+    public static List<NewsArticleResponse> getNews() {
+        return List.of(
+                new NewsArticleResponse("demo-ai", "AI research demo", "Static AI news fixture", "Meridian Demo",
+                        Instant.parse("2026-01-01T12:00:00Z"), "https://example.com/demo-ai", "ai-tech"),
+                new NewsArticleResponse("demo-tech", "Technology demo", "Static technology news fixture",
+                        "Meridian Demo", Instant.parse("2026-01-02T12:00:00Z"),
+                        "https://example.com/demo-tech", "ai-tech"));
     }
 
     /** @return cotizaciones ficticias de dólar oficial y blue en ARS. */
