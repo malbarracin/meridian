@@ -44,8 +44,8 @@ class ErrorContractHttpTest {
             .build();
 
     @ParameterizedTest
-    @CsvSource({"missing,404,NOT_FOUND", "conflict,409,CONFLICT", "duplicate,409,CONFLICT",
-            "unexpected,500,INTERNAL_ERROR"})
+    @CsvSource({"bad-request,400,BAD_REQUEST", "missing,404,NOT_FOUND", "conflict,409,CONFLICT",
+            "duplicate,409,CONFLICT", "unexpected,500,INTERNAL_ERROR"})
     @DisplayName("El advice traduce excepciones a JSON sin detalles internos")
     void devuelveContratoPorHttp(String scenario, int expectedStatus, String expectedCode) throws Exception {
         Instant before = Instant.now();
@@ -58,7 +58,10 @@ class ErrorContractHttpTest {
                 .andExpect(jsonPath("$.message").isString())
                 .andExpect(jsonPath("$.details").isEmpty())
                 .andExpect(jsonPath("$.timestamp").isString())
+                .andExpect(jsonPath("$.stackTrace").doesNotExist())
+                .andExpect(jsonPath("$.trace").doesNotExist())
                 .andExpect(content().string(not(containsString("secret"))))
+                .andExpect(content().string(not(containsString("Exception"))))
                 .andReturn();
 
         var json = new com.fasterxml.jackson.databind.ObjectMapper()
@@ -75,7 +78,15 @@ class ErrorContractHttpTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.details[0].field").value("name"))
                 .andExpect(jsonPath("$.details[0].message").isString())
-                .andExpect(jsonPath("$.timestamp").isString());
+                .andExpect(jsonPath("$.timestamp").isString())
+                .andExpect(jsonPath("$.stackTrace").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("ErrorCode expone los códigos del contrato")
+    void exponeCodigosDelContrato() {
+        assertThat(ErrorCode.values()).extracting(Enum::name)
+                .containsExactly("VALIDATION_ERROR", "BAD_REQUEST", "NOT_FOUND", "CONFLICT", "INTERNAL_ERROR");
     }
 
     @RestController
@@ -84,6 +95,7 @@ class ErrorContractHttpTest {
         @GetMapping("/errors/{scenario}")
         public void fail(@PathVariable String scenario) {
             switch (scenario) {
+                case "bad-request" -> throw new IllegalArgumentException("secret bad input");
                 case "missing" -> throw new NotFoundException("Recurso inexistente") { };
                 case "conflict" -> throw new ConflictException("Conflicto de estado") { };
                 case "duplicate" -> throw new DuplicateKeyException("secret index document");
