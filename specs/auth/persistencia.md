@@ -1,8 +1,8 @@
 ---
 title: Auth — Persistencia MongoDB (H2.1)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/H2-1-Persistencia-MongoDB-Auth-3ac75bb08ca7819bbb50ec4b5a5a8840
-updated: 2026-10-22T14:28:36.218Z
+updated: 2026-10-22T14:30:32.548Z
 ---
 
 # Auth — Persistencia MongoDB
