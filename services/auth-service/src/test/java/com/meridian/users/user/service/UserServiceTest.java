@@ -59,6 +59,7 @@ class UserServiceTest {
 
         UserResponse response = userService.register(request);
 
+        verify(userRepository).findByEmail("ana@example.com");
         ArgumentCaptor<User> capturedUser = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(capturedUser.capture());
         User savedUser = capturedUser.getValue();
@@ -84,6 +85,7 @@ class UserServiceTest {
                 new RegisterRequest("Ana", " ANA@EXAMPLE.COM ", "password123")))
                 .isInstanceOf(DuplicateUserException.class)
                 .hasMessage("Email ya registrado");
+        verify(userRepository).findByEmail("ana@example.com");
         verify(userRepository, never()).save(any(User.class));
     }
 
