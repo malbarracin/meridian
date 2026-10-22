@@ -1,8 +1,8 @@
 ---
 title: Auth — Tests de integración con MongoDB (H2.3)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/H2-3-Tests-Auth-con-MongoDB-3ac75bb08ca7819ea1bfe51ac5132d15
-updated: 2026-10-22T17:56:59.694Z
+updated: 2026-10-22T17:57:52.172Z
 ---
 
 # Auth — Tests de integración con MongoDB
