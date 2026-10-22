@@ -7,17 +7,19 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.meridian.users.user.dto.AuthResponse;
+import com.meridian.users.user.dto.LoginRequest;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
 import com.meridian.users.user.exception.DuplicateUserException;
+import com.meridian.users.user.exception.InvalidCredentialsException;
 import com.meridian.users.user.exception.UserNotFoundException;
 import com.meridian.users.user.mapper.UserMapper;
 import com.meridian.users.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
-/** Casos de uso de registro y consulta de usuarios. */
+/** Casos de uso de registro, autenticación y consulta de usuarios. */
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -51,6 +53,23 @@ public class UserService {
         UserResponse response = userMapper.toResponse(savedUser);
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
         return new AuthResponse(response, token);
+    }
+
+    /**
+     * Autentica al usuario verificando su contraseña contra el hash almacenado.
+     * @param request email y contraseña del usuario
+     * @return datos públicos del usuario y JWT de acceso
+     * @throws InvalidCredentialsException si las credenciales no coinciden
+     */
+    public AuthResponse login(LoginRequest request) {
+        String normalizedEmail = request.email().trim().toLowerCase(Locale.ROOT);
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(InvalidCredentialsException::new);
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+        String token = jwtService.generateToken(user.getId(), user.getEmail());
+        return new AuthResponse(userMapper.toResponse(user), token);
     }
 
     /**

@@ -2,5 +2,5 @@ package com.meridian.users.exception;
 
 /** Códigos estables del contrato de errores. */
 public enum ErrorCode {
-    VALIDATION_ERROR, BAD_REQUEST, NOT_FOUND, CONFLICT, INTERNAL_ERROR
+    VALIDATION_ERROR, BAD_REQUEST, NOT_FOUND, CONFLICT, UNAUTHORIZED, INTERNAL_ERROR
 }
