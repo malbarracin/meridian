@@ -20,6 +20,7 @@ import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.entity.User;
 import com.meridian.users.user.exception.DuplicateUserException;
 import com.meridian.users.user.exception.InvalidCredentialsException;
+import com.meridian.users.user.exception.UserNotFoundException;
 import com.meridian.users.user.mapper.UserMapper;
 import com.meridian.users.user.repository.UserRepository;
 
@@ -150,5 +151,47 @@ class UserServiceTest {
 
         verifyNoInteractions(userMapper, jwtService);
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("getByToken extrae el subject del JWT y devuelve el UserResponse mapeado")
+    void getByTokenDevuelvePerfilDelSubject() {
+        User user = new User();
+        user.setId("user-1");
+        UserResponse expected = new UserResponse("user-1", "Ada", "ada@example.com", Instant.now());
+        when(jwtService.extractUserId(JWT_TOKEN)).thenReturn("user-1");
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
+        when(userMapper.toResponse(user)).thenReturn(expected);
+
+        UserResponse response = userService.getByToken(JWT_TOKEN);
+
+        verify(jwtService).extractUserId(JWT_TOKEN);
+        verify(userRepository).findById("user-1");
+        verify(userMapper).toResponse(user);
+        assertThat(response).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("getByToken propaga InvalidCredentialsException si el JWT es inválido sin tocar la base")
+    void getByTokenPropagaJwtInvalido() {
+        when(jwtService.extractUserId(JWT_TOKEN)).thenThrow(new InvalidCredentialsException());
+
+        assertThatThrownBy(() -> userService.getByToken(JWT_TOKEN))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        verifyNoInteractions(userRepository, userMapper);
+    }
+
+    @Test
+    @DisplayName("getByToken lanza UserNotFoundException si el subject no existe en la base")
+    void getByTokenLanzaNotFoundSiElUsuarioNoExiste() {
+        when(jwtService.extractUserId(JWT_TOKEN)).thenReturn("user-1");
+        when(userRepository.findById("user-1")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> userService.getByToken(JWT_TOKEN))
+                .isInstanceOf(UserNotFoundException.class)
+                .hasMessageContaining("user-1");
+
+        verifyNoInteractions(userMapper);
     }
 }
