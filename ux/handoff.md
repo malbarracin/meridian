@@ -36,13 +36,13 @@ Variables: [00 Design System](https://design.penpot.app/#/workspace?team-id=65d5
 ##### Register — mobile
 - Tablero: Register / mobile · https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f
 - Estados: default [Register / mobile](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · cargando [Register / mobile / loading](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · error inline [Register / mobile / error](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · error email [Register / mobile / error email](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · error general [Register / mobile / error general](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f) · éxito/redirección [Register / mobile / éxito](https://design.penpot.app/#/workspace?team-id=65d5ee1e-9774-8045-8008-d0b3ae2e77c4&file-id=4b7520f4-628e-8193-8008-d4235058adcf&page-id=5f436e01-9f75-80bf-8008-d429041c732f)
-- Componentes: MERIDIAN wordmark · Input (default, disabled, error) · Button primary (default, loading) · ErrorBanner · InlineError · password-toggle (texto "Mostrar")
+- Componentes: MERIDIAN wordmark · Input (default, disabled, error) · Button primary (default, loading) · ErrorBanner · InlineError · password-toggle (hit ≥44×44) · login-link (hit alto ≥44)
 - Microcopy: título "Crear cuenta" · CTA "Registrarse" (único primario) · link "¿Ya tenés cuenta? Iniciá sesión" · toggle "Mostrar" · loading "Cargando…" · errores "Ingresá un email válido" · "La contraseña debe tener al menos 8 caracteres" · "Este email ya tiene una cuenta. Iniciá sesión" · "Algo salió mal. Intentá de nuevo."
 - Datos: nombre, email, contraseña (formulario de registro; sin datos de API)
 - Assets: wordmark MERIDIAN (componente) · export SVG/PNG
 - Motion: CTA loading (spinner) · `motion.fast` 150 ms en hover/focus de Input y Button · éxito: redirección automática a Dashboard · reduced-motion: sin spinner animado (estado estático "Cargando…") o solo opacidad
 - Marca: MERIDIAN en layers; sin Soma / SOMA / Ops Deck
-- Layout: columna portrait 390×844 · form-card fill con padding 20 · CTA y campos ≥ 44 de alto
+- Layout: columna portrait 390×844 · form-card fill con padding 20 · CTA, campos, password-toggle y login-link ≥ 44 de alto (áreas táctiles)
 - Éxito: frame `Register / mobile / éxito` = destino Dashboard tras registro exitoso
 
 ##### Login — web
