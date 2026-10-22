@@ -15,10 +15,6 @@ permissions:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    env:
-      # Public test fixture, never a production signing key.
-      JWT_SECRET: test-secret-key-for-unit-tests-only-32chars
-      JWT_EXPIRATION_MS: '3600000'
     defaults:
       run:
         working-directory: services/auth-service
@@ -31,7 +27,23 @@ jobs:
           cache: maven
           cache-dependency-path: services/auth-service/pom.xml
       - run: chmod +x mvnw
-      - run: ./mvnw -q -B clean verify
+      # Tests run on the host and use the runner's Docker socket directly.
+      # Fail here if Docker is unavailable; never skip the integration suite.
+      - name: Check Docker for Testcontainers
+        run: |
+          docker version
+          docker info
+      - name: Verify with MongoDB Testcontainers
+        run: ./mvnw -q -B verify
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-service-test-reports
+          path: |
+            services/auth-service/target/surefire-reports/
+            services/auth-service/target/site/jacoco/
+          if-no-files-found: warn
   docker:
     needs: build-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

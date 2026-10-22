@@ -43,8 +43,10 @@ El build de imagen omite tests; CI los ejecuta antes del build Docker.
 Linux/CI: `cd services/auth-service` y `./mvnw clean verify -B`.
 No se versionan `target/`, reportes ni `.env`.
 Los perfiles dev/docker/test/prod requieren MONGO_URI y MONGO_DATABASE por entorno, sin
-fallback embebido. Solo los tests existentes crean MongoDB aislado mediante Flapdoodle y
-DynamicPropertySource. El perfil test habilita índices, sin arrancar una base implícitamente.
+fallback embebido. Los tests anteriores usan Flapdoodle; la suite H2.3 usa MongoDB 7.0.14
+mediante Testcontainers y DynamicPropertySource. Requiere acceso al daemon Docker y descarga
+las imágenes de MongoDB y de los auxiliares de Testcontainers si no están en caché.
+El perfil test habilita índices, sin arrancar una base implícitamente.
 
 App fuera de Docker (MongoDB de Compose en localhost):
 
@@ -75,13 +77,40 @@ mongosh $env:MONGO_URI --quiet --eval 'db.getSiblingDB(process.env.MONGO_DATABAS
 ## CI/CD
 
 `.github/workflows/auth-service.yml` verifica cada push/PR que afecte el servicio, su workflow
-o el chart, con Temurin 21, caché Maven y `./mvnw -q -B clean verify`. El job build-test
-define `JWT_SECRET` de test (público, sin uso productivo) y `JWT_EXPIRATION_MS`. En push a main construye la
+o el chart, con Temurin 21, caché Maven y `./mvnw -q -B verify`. El job build-test
+usa la configuración JWT pública de `src/test/resources/application.yml`. En push a main construye la
 imagen con tag `ghcr.io/<org>/<repo>:<sha>`, tras pasar tests. No publica imágenes porque no
 hay registry autorizado/configurado. Para push futuro: configurar permisos packages:write
 y GITHUB_TOKEN, o credencial del registry en GitHub Secrets. No hay secretos reales en workflows.
 `auth-service-cd.yml` es una plantilla manual informativa; no despliega. Configurar registry,
 cluster, credenciales y environment protegido antes de agregar un deploy real.
+
+H2.3 ejecuta los tests en el host `ubuntu-latest`, usando directamente el socket Docker
+del runner (sin contenedor de job ni Docker-in-Docker). Antes de Maven, `docker version`
+y `docker info` deben pasar. No se deshabilitan tests ni Ryuk; una falta de Docker falla
+el pipeline. Surefire descubre las clases `*IntegrationTest` con el patrón `*Test`;
+no hace falta un perfil Maven adicional. El workflow conserva los reportes Surefire y
+JaCoCo incluso si falla la verificación, en el artefacto `auth-service-test-reports`.
+La imagen se construye después de pasar la suite; el Dockerfile omite los tests dentro
+del build porque ya se ejecutaron con Docker en el host.
+No exportar `JWT_SECRET` al ejecutar tests: `JwtConfigTest.fallaArranqueSinClave` necesita
+comprobar la ausencia de la clave en un contexto aislado. CI no define variables JWT globales.
+
+H2.3 no agrega variables de ejecución: login y `/me` reutilizan `MONGO_URI`,
+`MONGO_DATABASE`, `JWT_SECRET` y `JWT_EXPIRATION_MS`. Dockerfile, Compose y `.env.example`
+existentes cubren esta configuración y no requieren modificaciones.
+
+Para comprobar los endpoints de la imagen final, después del arranque con Compose:
+
+```powershell
+$body = @{ name = 'Smoke'; email = ('smoke-' + [guid]::NewGuid().ToString('N') + '@example.com'); password = 'SmokeTest123!' } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8080/api/v1/users -Method Post -ContentType 'application/json' -Body $body
+$login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body
+Invoke-RestMethod http://localhost:8080/api/v1/users/me -Headers @{ Authorization = ('Bearer ' + $login.token) }
+```
+
+El registro debe devolver 201, login 200 con token y `/me` 200 con el usuario registrado.
+Usar el puerto de `.env` si se cambió el valor 8080.
 
 ## Helm
 
@@ -123,6 +152,20 @@ El servicio garantiza el índice durante el arranque. No se realizó deploy real
 
 ## Verificación realizada
 
+### Cierre H2.3 / TASK-34 (2026-10-22)
+
+- `docker compose --env-file .env.example config --quiet`: pasó.
+- YAML de workflow y Compose validado con SnakeYAML 2.4, rechazando claves duplicadas.
+- `mvnw.cmd -q dependency:tree -Dverbose`: terminó con código 0.
+- Se detectó y eliminó la configuración JWT global del workflow: hacía fallar el test
+  de arranque sin clave. La fixture del classpath proporciona los valores para los demás tests.
+- `mvnw.cmd -q -B clean verify`: intentado; Docker no está accesible desde este entorno.
+  Resultado: 116 tests, 104 correctos, 0 fallos de aserción, 12 errores al inicializar
+  Testcontainers por ausencia de Docker accesible; 0 omitidos.
+  No se omitieron tests ni se modificó el gate JaCoCo. La suite completa y su cobertura
+  quedan pendientes de un runner con Docker accesible.
+- `git diff --check`: pasó. Sin cambios necesarios en Dockerfile/Compose ni variables nuevas.
+
 ### Cierre H2.2 / TASK-26 (2026-10-22)
 
 - `docker compose --env-file .env.example config --quiet`: pasó con las variables JWT.
@@ -153,6 +196,11 @@ El servicio garantiza el índice durante el arranque. No se realizó deploy real
 
 ## Pendiente de verificar
 
+- H2.3: desde `services/auth-service`, sin variables JWT globales,
+  ejecutar `./mvnw -q -B verify` en Linux o `.\mvnw.cmd -q -B clean verify` en Windows
+  con Docker accesible. Confirmar GitHub Actions verde y revisar los reportes publicados.
+- H2.3: ejecutar el arranque Compose indicado abajo y el smoke de registro/login/`/me`
+  de este documento para verificar la imagen final (TASK-34 AC #3).
 - Docker está instalado, pero `docker info` devuelve permiso denegado al daemon
   `dockerDesktopLinuxEngine`. Pendientes build, arranque y HTTP 200 (AC #8):
   desde `services/auth-service`, `docker compose --env-file .env.example up --build -d --wait`,
