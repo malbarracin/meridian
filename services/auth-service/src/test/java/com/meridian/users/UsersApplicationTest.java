@@ -18,6 +18,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import com.meridian.users.config.JwtConfig;
+import com.meridian.users.user.service.JwtService;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,6 +33,9 @@ class UsersApplicationTest {
 
     @Autowired
     private JwtConfig jwtConfig;
+
+    @Autowired
+    private JwtService jwtService;
 
     @DynamicPropertySource
     static void configureMongo(DynamicPropertyRegistry registry) {
@@ -66,5 +70,8 @@ class UsersApplicationTest {
         assertThat(jwtConfig.secret()).isEqualTo("test-secret-key-for-unit-tests-only-32chars");
         assertThat(jwtConfig.secret()).hasSizeGreaterThanOrEqualTo(32);
         assertThat(jwtConfig.expirationMs()).isEqualTo(3_600_000L);
+        String token = jwtService.generateToken("context-user", "context@example.com");
+        assertThat(token).isNotBlank();
+        assertThat(jwtService.isValid(token)).isTrue();
     }
 }
