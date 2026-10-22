@@ -1,0 +1,22 @@
+replicaCount: 1
+image:
+  repository: auth-service
+  tag: local
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+service:
+  port: 8080
+springProfile: prod
+mongo:
+  database: auth
+  # Pre-created Secret containing MONGO_URI. MongoDB is external to this chart.
+  existingSecret: auth-mongodb
+  # Used only when existingSecret is empty; supply via an ignored values file.
+  uri: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi

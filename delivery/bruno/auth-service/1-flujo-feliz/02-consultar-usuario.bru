@@ -1,0 +1,25 @@
+meta {
+  name: Consultar usuario por id
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/{{userId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.id: isString
+  res.body.createdAt: isString
+}
+
+docs {
+  Devuelve los datos públicos del usuario creado en el pedido anterior. No expone la contraseña ni su hash.
+
+  Respuestas: 200 usuario encontrado, 404 usuario inexistente, 500 error interno.
+
+  Requiere haber ejecutado "Registrar usuario" para tener userId.
+}

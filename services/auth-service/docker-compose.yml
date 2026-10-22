@@ -1,0 +1,34 @@
+services:
+  auth-service:
+    build: .
+    image: auth-service:local
+    ports:
+      - "127.0.0.1:${PORT:-8080}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      MONGO_URI: ${MONGO_URI:?Set MONGO_URI in .env}
+      MONGO_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
+      PORT: "8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -qO-, 'http://127.0.0.1:8080/actuator/health']
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+  mongodb:
+    image: mongo:7
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "if (db.adminCommand('ping').ok !== 1) quit(1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+volumes:
+  mongodb-data:

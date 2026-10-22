@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: auth-service
+  data:
+    mongodb:
+      auto-index-creation: true
+
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 7.0.14

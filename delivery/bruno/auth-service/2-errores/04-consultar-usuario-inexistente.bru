@@ -1,0 +1,21 @@
+meta {
+  name: Consultar usuario inexistente
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/6710f3a2c9e77c00ffffffff
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+  res.body.code: eq NOT_FOUND
+  res.body.details: isArray
+}
+
+docs {
+  Consulta un id que no existe. Responde 404 NOT_FOUND con el contrato uniforme y details vacío.
+}

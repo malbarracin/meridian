@@ -1,0 +1,5 @@
+replicaCount: 1
+springProfile: docker
+mongo:
+  database: auth_dev
+  existingSecret: auth-mongodb
