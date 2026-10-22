@@ -6,10 +6,11 @@ services:
       - "127.0.0.1:${PORT:-8080}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      MONGO_URI: ${MONGO_URI:?Set MONGO_URI in .env}
+      MONGODB_URI: &mongodb-uri mongodb://${MONGO_USER:?Set MONGO_USER in .env}:${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}@mongodb:27017/${MONGO_DATABASE:?Set MONGO_DATABASE in .env}?authSource=admin
+      # Existing Spring configuration consumes MONGO_URI; keep both names identical.
+      MONGO_URI: *mongodb-uri
       MONGO_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
-      # Public development example only; never use in production.
-      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-32-chars-minimum}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 ASCII bytes)}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
       PORT: "8080"
     depends_on:
@@ -23,12 +24,16 @@ services:
       retries: 3
   mongodb:
     image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:?Set MONGO_USER in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?Set MONGO_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
     ports:
       - "127.0.0.1:27017:27017"
     volumes:
       - mongodb-data:/data/db
     healthcheck:
-      test: [CMD, mongosh, --quiet, --eval, "if (db.adminCommand('ping').ok !== 1) quit(1)"]
+      test: [CMD, mongosh, --quiet, --eval, "const admin = db.getSiblingDB('admin'); admin.auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD); if (admin.runCommand({ping: 1}).ok !== 1) quit(1)"]
       interval: 10s
       timeout: 5s
       start_period: 20s
