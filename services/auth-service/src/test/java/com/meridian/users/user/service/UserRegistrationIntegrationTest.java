@@ -1,7 +1,10 @@
 package com.meridian.users.user.service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
+
+import javax.crypto.SecretKey;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +16,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
 
 import com.meridian.users.config.JwtConfig;
 import com.meridian.users.config.SecurityConfig;
@@ -35,6 +41,8 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserRegistrationIntegrationTest {
 
+    private static final String JWT_SECRET = "test-secret-key-for-unit-tests-only-32chars";
+
     @Mock
     private UserRepository userRepository;
 
@@ -45,7 +53,7 @@ class UserRegistrationIntegrationTest {
     @BeforeEach
     void setUp() {
         passwordEncoder = new SecurityConfig().passwordEncoder();
-        jwtService = new JwtService(new JwtConfig("test-secret-key-for-unit-tests-only-32chars", 3600000));
+        jwtService = new JwtService(new JwtConfig(JWT_SECRET, 3600000));
         userService = new UserService(userRepository, passwordEncoder, Mappers.getMapper(UserMapper.class), jwtService);
     }
 
@@ -77,6 +85,14 @@ class UserRegistrationIntegrationTest {
                 savedUser.getCreatedAt()));
         assertThat(response.token()).isNotBlank();
         assertThat(jwtService.isValid(response.token())).isTrue();
+        SecretKey signingKey = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
+        var claims = Jwts.parser()
+                .verifyWith(signingKey)
+                .build()
+                .parseSignedClaims(response.token())
+                .getPayload();
+        assertThat(claims.getSubject()).isEqualTo("user-1");
+        assertThat(claims.get("email", String.class)).isEqualTo("ana@example.com");
         String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(response);
         assertThat(json).doesNotContain("password", savedUser.getPasswordHash());
         assertThat(request.toString()).doesNotContain(request.password(), request.email(), request.name());
