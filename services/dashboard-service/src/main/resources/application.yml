@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: dashboard-service
+  main:
+    web-application-type: servlet
+
+server:
+  port: ${PORT:8081}
+  error:
+    include-stacktrace: never
+    include-message: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs.path: /v3/api-docs
+  swagger-ui.path: /swagger-ui.html
+
+dashboard:
+  cache:
+    ttl-seconds: ${DASHBOARD_CACHE_TTL_SECONDS:60}
+  use-mock: ${DASHBOARD_USE_MOCK:false}
+  providers:
+    dolar-api:
+      base-url: ${DASHBOARD_DOLAR_API_BASE_URL:https://dolarapi.com}
+      timeout-seconds: ${DASHBOARD_DOLAR_API_TIMEOUT_SECONDS:5}
+    frankfurter:
+      base-url: ${DASHBOARD_FRANKFURTER_BASE_URL:https://api.frankfurter.app}
+      timeout-seconds: ${DASHBOARD_FRANKFURTER_TIMEOUT_SECONDS:5}
+    coin-gecko:
+      base-url: ${DASHBOARD_COIN_GECKO_BASE_URL:https://api.coingecko.com}
+      timeout-seconds: ${DASHBOARD_COIN_GECKO_TIMEOUT_SECONDS:5}
+    finnhub:
+      base-url: ${DASHBOARD_FINNHUB_BASE_URL:https://finnhub.io}
+      timeout-seconds: ${DASHBOARD_FINNHUB_TIMEOUT_SECONDS:5}
+      api-key: ${FINNHUB_API_KEY:}
+    news-api:
+      base-url: ${DASHBOARD_NEWS_API_BASE_URL:https://newsapi.org}
+      timeout-seconds: ${DASHBOARD_NEWS_API_TIMEOUT_SECONDS:5}
+      api-key: ${NEWS_API_KEY:}
+    hn-algolia:
+      base-url: ${DASHBOARD_HN_ALGOLIA_BASE_URL:https://hn.algolia.com}
+      timeout-seconds: ${DASHBOARD_HN_ALGOLIA_TIMEOUT_SECONDS:5}
