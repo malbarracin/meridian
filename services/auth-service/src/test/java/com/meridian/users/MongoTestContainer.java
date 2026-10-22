@@ -21,6 +21,11 @@ public abstract class MongoTestContainer {
         MONGO.start();
     }
 
+    /** @return contenedor compartido para simular interrupciones recuperables en los tests */
+    protected static MongoDBContainer mongoContainer() {
+        return MONGO;
+    }
+
     /**
      * Registra la URI del replica set antes de inicializar la conexión de Spring Data MongoDB.
      *
