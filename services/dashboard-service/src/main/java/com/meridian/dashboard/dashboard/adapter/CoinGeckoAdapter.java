@@ -21,16 +21,16 @@ import com.meridian.dashboard.dashboard.dto.CryptoResponse;
 import com.meridian.dashboard.dashboard.mapper.CryptoMapper;
 import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 
-/** Consulta CoinGecko con caché por recurso y límite total de cinco segundos. */
+/** Consulta CoinGecko con caché por recurso y timeout configurable por petición. */
 @Component
 public class CoinGeckoAdapter {
 
-    private static final Duration TIMEOUT = Duration.ofSeconds(5);
     private static final long MINIMUM_TTL_SECONDS = 60;
     private final WebClient client;
     private final CryptoMapper mapper;
     private final boolean useMock;
     private final Duration ttl;
+    private final Duration requestTimeout;
     private final Clock clock;
     private final Map<String, CacheEntry<?>> cache = new HashMap<>();
 
@@ -47,6 +47,8 @@ public class CoinGeckoAdapter {
         this.ttl = Duration.ofSeconds(Math.max(MINIMUM_TTL_SECONDS,
                 environment.getProperty("dashboard.cache.ttl-seconds", Long.class, MINIMUM_TTL_SECONDS)));
         this.clock = clock;
+        this.requestTimeout = Duration.ofSeconds(environment.getProperty(
+                "dashboard.providers.coin-gecko.timeout-seconds", Long.class, 5L));
     }
 
     /** Devuelve BTC y ETH; los fallos identifican la sección crypto. */
@@ -82,7 +84,7 @@ public class CoinGeckoAdapter {
 
     private JsonNode request(String path) {
         return client.get().uri(path).retrieve().bodyToMono(JsonNode.class)
-                .timeout(TIMEOUT).blockOptional().orElseThrow(
+                .timeout(requestTimeout).blockOptional().orElseThrow(
                         () -> new IllegalArgumentException("Respuesta vacía de CoinGecko"));
     }
 

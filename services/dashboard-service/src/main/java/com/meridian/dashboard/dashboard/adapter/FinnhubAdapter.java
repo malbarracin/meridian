@@ -21,7 +21,6 @@ import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 @Component
 public class FinnhubAdapter {
 
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration HISTORY_WINDOW = Duration.ofDays(7);
     private static final List<String> TICKERS = List.of("AAPL", "MSFT", "SPY");
 
@@ -29,14 +28,17 @@ public class FinnhubAdapter {
     private final EquityMapper mapper;
     private final String apiKey;
     private final boolean useMock;
+    private final Duration requestTimeout;
 
     public FinnhubAdapter(@Qualifier("finnhubWebClient") WebClient webClient, EquityMapper mapper,
             @Value("${dashboard.providers.finnhub.api-key:}") String apiKey,
-            @Value("${dashboard.use-mock:false}") boolean useMock) {
+            @Value("${dashboard.use-mock:false}") boolean useMock,
+            @Value("${dashboard.providers.finnhub.timeout-seconds:5}") long timeoutSeconds) {
         this.webClient = Objects.requireNonNull(webClient);
         this.mapper = Objects.requireNonNull(mapper);
         this.apiKey = Objects.requireNonNull(apiKey);
         this.useMock = useMock;
+        this.requestTimeout = Duration.ofSeconds(timeoutSeconds);
     }
 
     /** @return quotes de AAPL, MSFT y SPY; sin key o en modo mock devuelve fixtures. */
@@ -85,7 +87,7 @@ public class FinnhubAdapter {
                 .uri(builder -> builder.path("/api/v1/stock/candle").queryParam("symbol", ticker)
                         .queryParam("resolution", "D").queryParam("from", from).queryParam("to", to)
                         .queryParam("token", apiKey).build())
-                .retrieve().bodyToMono(FinnhubCandles.class).timeout(REQUEST_TIMEOUT).block();
+                .retrieve().bodyToMono(FinnhubCandles.class).timeout(requestTimeout).block();
         if (candles == null) {
             throw new IllegalStateException("Respuesta de velas vacía");
         }
@@ -105,7 +107,7 @@ public class FinnhubAdapter {
         FinnhubQuote quote = webClient.get()
                 .uri(builder -> builder.path("/api/v1/quote").queryParam("symbol", ticker)
                         .queryParam("token", apiKey).build())
-                .retrieve().bodyToMono(FinnhubQuote.class).timeout(REQUEST_TIMEOUT).block();
+                .retrieve().bodyToMono(FinnhubQuote.class).timeout(requestTimeout).block();
         if (quote == null || quote.c() == null || quote.c().signum() <= 0) {
             throw new IllegalStateException("Cotización de bolsa incompleta");
         }

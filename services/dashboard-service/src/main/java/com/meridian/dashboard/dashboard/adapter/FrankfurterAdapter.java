@@ -16,18 +16,20 @@ import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 @Component
 public class FrankfurterAdapter {
 
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
     private static final List<String> TARGET_CURRENCIES = List.of("EUR", "BRL");
 
     private final WebClient webClient;
     private final CurrencyMapper mapper;
     private final boolean useMock;
+    private final Duration requestTimeout;
 
     public FrankfurterAdapter(@Qualifier("frankfurterWebClient") WebClient webClient,
-            CurrencyMapper mapper, @Value("${dashboard.use-mock:false}") boolean useMock) {
+            CurrencyMapper mapper, @Value("${dashboard.use-mock:false}") boolean useMock,
+            @Value("${dashboard.providers.frankfurter.timeout-seconds:5}") long timeoutSeconds) {
         this.webClient = webClient;
         this.mapper = mapper;
         this.useMock = useMock;
+        this.requestTimeout = Duration.ofSeconds(timeoutSeconds);
     }
 
     /** @return tasas USD a EUR y BRL; lanza excepción ante timeout, error HTTP o respuesta incompleta. */
@@ -38,7 +40,7 @@ public class FrankfurterAdapter {
         FrankfurterRates quotes = webClient.get()
                 .uri(builder -> builder.path("/latest").queryParam("from", "USD")
                         .queryParam("to", "EUR,BRL").build())
-                .retrieve().bodyToMono(FrankfurterRates.class).timeout(REQUEST_TIMEOUT).block();
+                .retrieve().bodyToMono(FrankfurterRates.class).timeout(requestTimeout).block();
         if (quotes == null || !"USD".equals(quotes.base()) || quotes.rates() == null
                 || TARGET_CURRENCIES.stream().anyMatch(currency -> quotes.rates().get(currency) == null)) {
             throw new IllegalStateException("Faltan tipos de cambio requeridos");

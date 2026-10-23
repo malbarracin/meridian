@@ -121,7 +121,7 @@ class DolarApiAdapterTest {
 
     private DolarApiAdapter createAdapter(boolean useMock) {
         return new DolarApiAdapter(WebClient.builder().baseUrl(server.url("/").toString()).build(),
-                Mappers.getMapper(CurrencyMapper.class), useMock);
+                Mappers.getMapper(CurrencyMapper.class), useMock, 5);
     }
 
     private MockResponse jsonResponse(String body) {

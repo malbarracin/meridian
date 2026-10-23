@@ -16,17 +16,18 @@ import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 @Component
 public class DolarApiAdapter {
 
-    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(5);
-
     private final WebClient webClient;
     private final CurrencyMapper mapper;
     private final boolean useMock;
+    private final Duration requestTimeout;
 
     public DolarApiAdapter(@Qualifier("dolarApiWebClient") WebClient webClient,
-            CurrencyMapper mapper, @Value("${dashboard.use-mock:false}") boolean useMock) {
+            CurrencyMapper mapper, @Value("${dashboard.use-mock:false}") boolean useMock,
+            @Value("${dashboard.providers.dolar-api.timeout-seconds:5}") long timeoutSeconds) {
         this.webClient = webClient;
         this.mapper = mapper;
         this.useMock = useMock;
+        this.requestTimeout = Duration.ofSeconds(timeoutSeconds);
     }
 
     /** @return cotizaciones oficial y blue; lanza excepción si el proveedor falla o devuelve datos incompletos. */
@@ -43,7 +44,7 @@ public class DolarApiAdapter {
                     }
                     return mapper.toDolarResponse(quote);
                 })
-                .collectList().timeout(REQUEST_TIMEOUT).block();
+                .collectList().timeout(requestTimeout).block();
         if (quotes == null || quotes.stream().noneMatch(quote -> "oficial".equals(quote.tipo()))
                 || quotes.stream().noneMatch(quote -> "blue".equals(quote.tipo()))) {
             throw new IllegalStateException("Faltan cotizaciones de dólar requeridas");

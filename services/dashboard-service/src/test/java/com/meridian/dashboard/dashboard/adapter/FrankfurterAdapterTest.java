@@ -118,7 +118,7 @@ class FrankfurterAdapterTest {
 
     private FrankfurterAdapter createAdapter(boolean useMock) {
         return new FrankfurterAdapter(WebClient.builder().baseUrl(server.url("/").toString()).build(),
-                Mappers.getMapper(CurrencyMapper.class), useMock);
+                Mappers.getMapper(CurrencyMapper.class), useMock, 5);
     }
 
     private MockResponse jsonResponse(String body) {

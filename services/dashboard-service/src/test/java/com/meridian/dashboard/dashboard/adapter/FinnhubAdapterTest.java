@@ -241,7 +241,7 @@ class FinnhubAdapterTest {
 
     private FinnhubAdapter adapter(String key, boolean useMock) {
         return new FinnhubAdapter(WebClient.builder().baseUrl(server.url("/").toString()).build(),
-                Mappers.getMapper(EquityMapper.class), key, useMock);
+                Mappers.getMapper(EquityMapper.class), key, useMock, 5);
     }
 
     private MockResponse json(String body) {

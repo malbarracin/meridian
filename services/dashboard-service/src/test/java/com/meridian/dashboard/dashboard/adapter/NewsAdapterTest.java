@@ -70,7 +70,9 @@ class NewsAdapterTest {
         assertThat(url.queryParameter("language")).isEqualTo("en");
         assertThat(url.queryParameter("sortBy")).isEqualTo("publishedAt");
         assertThat(url.queryParameter("pageSize")).isEqualTo("8");
-        assertThat(url.queryParameter("apiKey")).isEqualTo("test-key");
+        assertThat(url.queryParameter("apiKey")).isNull();
+        assertThat(url.toString()).doesNotContain("test-key");
+        assertThat(request.getHeader("X-Api-Key")).isEqualTo("test-key");
         assertThat(hn.getRequestCount()).isZero();
     }
 
@@ -197,7 +199,7 @@ class NewsAdapterTest {
 
     private NewsAdapter adapter(String key, boolean useMock) {
         return new NewsAdapter(WebClient.create(newsApi.url("/").toString()),
-                WebClient.create(hn.url("/").toString()), Mappers.getMapper(NewsMapper.class), key, useMock);
+                WebClient.create(hn.url("/").toString()), Mappers.getMapper(NewsMapper.class), key, useMock, 5, 5);
     }
 
     private MockResponse hnSuccess() {
