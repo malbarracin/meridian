@@ -84,10 +84,14 @@ class LoginIntegrationTest extends MongoTestContainer {
                 .andExpect(jsonPath("$.user.email").value(EMAIL))
                 .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value((int) (jwtConfig.expirationMs() / 1000)))
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(loginResult.getResponse().getContentAsString());
         String token = body.get("accessToken").asText();
+        assertThat(body.get("expiresIn").asLong()).isPositive();
         SecretKey signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
         String subject = Jwts.parser()
                 .verifyWith(signingKey)

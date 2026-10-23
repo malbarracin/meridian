@@ -49,7 +49,7 @@ class UserControllerTest {
     private UserService userService;
 
     @Test
-    @DisplayName("POST /api/v1/auth/register devuelve 201 con AuthResponse (user + token) sin passwordHash")
+    @DisplayName("POST /api/v1/auth/register devuelve 201 con AuthResponse (accessToken, tokenType, expiresIn, user) sin passwordHash")
     void registraUsuarioSinExponerContrasena() throws Exception {
         when(userService.register(REQUEST)).thenReturn(
                 new AuthResponse(RESPONSE, "signed-token", AuthResponse.TOKEN_TYPE, 3600));

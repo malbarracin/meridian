@@ -168,9 +168,19 @@ class AuthIntegrationTest extends MongoTestContainer {
         String response = mockMvc.perform(post(REGISTER_PATH).contentType(MediaType.APPLICATION_JSON)
                         .content(registrationBody(email)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").isNumber())
+                .andExpect(jsonPath("$.user.id").isNotEmpty())
+                .andExpect(jsonPath("$.user.name").value(NAME))
+                .andExpect(jsonPath("$.user.email").value(email.trim().toLowerCase()))
+                .andExpect(jsonPath("$.user.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response);
+        JsonNode body = objectMapper.readTree(response);
+        assertThat(body.path("expiresIn").asLong()).isPositive();
+        return body;
     }
 
     private void verificaDuplicado(String email) throws Exception {

@@ -61,10 +61,15 @@ class ProfileIntegrationTest extends MongoTestContainer {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(REGISTER_BODY))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").isNumber())
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andReturn();
         JsonNode registerBody = objectMapper.readTree(registerResult.getResponse().getContentAsString());
         String userId = registerBody.path("user").path("id").asText();
         String token = registerBody.path("accessToken").asText();
+        assertThat(registerBody.path("expiresIn").asLong()).isPositive();
         User persisted = userRepository.findById(userId).orElseThrow();
 
         mockMvc.perform(get(PROFILE_PATH).header("Authorization", "Bearer " + token))
