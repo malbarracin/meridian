@@ -34,7 +34,14 @@ import com.meridian.users.user.service.UserService;
 
 import lombok.RequiredArgsConstructor;
 
-/** API de autenticación mediante email y contraseña. */
+/**
+ * API de autenticación mediante email y contraseña.
+ * <p>
+ * Expone el registro ({@code POST /api/v1/auth/register}), el inicio de sesión
+ * ({@code POST /api/v1/auth/login}), el perfil autenticado ({@code GET /api/v1/auth/me}) y el cierre
+ * de sesión del cliente ({@code POST /api/v1/auth/logout}). El registro y el login devuelven
+ * {@code accessToken}, {@code tokenType}, {@code expiresIn} y {@code user}.
+ */
 @RestController
 @RequestMapping(value = "/api/v1/auth", produces = MediaType.APPLICATION_JSON_VALUE)
 @RequiredArgsConstructor
@@ -71,10 +78,16 @@ public class AuthController {
                                     """))),
             @ApiResponse(responseCode = "404", description = "Usuario no encontrado",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ref = "#/components/examples/NotFound"))),
+                            examples = @ExampleObject(value = """
+                                    {"code":"NOT_FOUND","message":"Usuario no encontrado por id: 6710f3a2c9e77c0012345678",
+                                    "details":[],"timestamp":"2026-10-22T10:05:00Z"}
+                                    """))),
             @ApiResponse(responseCode = "500", description = "Error interno",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ref = "#/components/examples/InternalError")))
+                            examples = @ExampleObject(value = """
+                                    {"code":"INTERNAL_ERROR","message":"Error interno","details":[],
+                                    "timestamp":"2026-10-22T10:05:00Z"}
+                                    """)))
     })
     public ResponseEntity<UserResponse> getMe(
             @Parameter(description = "JWT de acceso con prefijo Bearer", example = "Bearer eyJhbGciOiJIUzI1NiJ9...")
@@ -91,7 +104,8 @@ public class AuthController {
      * El email se normaliza antes de guardarse y la contraseña se persiste solo como hash.
      *
      * @param request datos de registro
-     * @return 201 con los datos públicos del usuario creado y JWT de acceso
+     * @return 201 con {@code accessToken}, {@code tokenType}, {@code expiresIn} y el perfil público
+     *         del usuario creado en {@code user}
      */
     @PostMapping(value = "/register", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Registrar usuario",
@@ -145,12 +159,21 @@ public class AuthController {
     /**
      * Verifica las credenciales y emite un token de acceso.
      * @param request credenciales validadas
-     * @return 200 con el perfil público y JWT
+     * @return 200 con {@code accessToken}, {@code tokenType}, {@code expiresIn} y el perfil público
+     *         del usuario autenticado en {@code user}
      */
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
     @Operation(summary = "Iniciar sesión", description = "Normaliza el email y verifica la contraseña con BCrypt. "
             + "Devuelve un JWT y los datos públicos del usuario. Las credenciales incorrectas reciben "
-            + "el mismo error tanto si el email no existe como si la contraseña es incorrecta.")
+            + "el mismo error tanto si el email no existe como si la contraseña es incorrecta.",
+            requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                    required = true, description = "Credenciales del usuario ya registrado.",
+                    content = @Content(schema = @Schema(implementation = LoginRequest.class),
+                            examples = @ExampleObject(name = "Credenciales válidas", value = """
+                                    {
+                                      "email": "ana.perez@example.com",
+                                      "password": "password123"
+                                    }"""))))
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Credenciales válidas y JWT emitido",
                     content = @Content(schema = @Schema(implementation = AuthResponse.class),
@@ -171,7 +194,10 @@ public class AuthController {
                                     """))),
             @ApiResponse(responseCode = "500", description = "Error interno",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class),
-                            examples = @ExampleObject(ref = "#/components/examples/InternalError")))
+                            examples = @ExampleObject(value = """
+                                    {"code":"INTERNAL_ERROR","message":"Error interno","details":[],
+                                    "timestamp":"2026-10-22T10:05:00Z"}
+                                    """)))
     })
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return userService.login(request);

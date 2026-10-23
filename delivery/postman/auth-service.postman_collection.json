@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "auth-service",
-    "description": "Registro, login y consulta de los datos públicos de usuarios del auth-service. Orden sugerido: carpeta 1 (flujo feliz) → carpeta 2 (errores) → carpeta 3 (salud). El alta genera un email único por corrida y devuelve AuthResponse (user + token JWT); guarda el id en {{userId}} y el token en {{authToken}}. El login reutiliza ese email, devuelve otro AuthResponse y actualiza {{authToken}}; GET /me lo usa como Bearer. Los tokens de los ejemplos son marcadores, no credenciales reales.",
+    "description": "Registro, login, perfil autenticado y logout del auth-service. Orden sugerido: carpeta 1 (flujo feliz) → carpeta 2 (errores) → carpeta 3 (salud). El registro genera un email único por corrida y devuelve AuthResponse (user + accessToken/tokenType/expiresIn); guarda el id en {{userId}} y el JWT en {{authToken}}. El login reutiliza ese email, devuelve otro AuthResponse y actualiza {{authToken}}; GET /api/v1/auth/me lo usa como Bearer y el logout descarta el token en el cliente. Los tokens de los ejemplos son marcadores, no credenciales reales.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -25,7 +25,7 @@
   "item": [
     {
       "name": "1. Flujo feliz",
-      "description": "Alta de usuario y consulta del usuario recién creado. Ejecutar en orden: el alta guarda {{userId}}, {{userEmail}} y {{authToken}}.",
+      "description": "Registro, sesión, perfil autenticado y logout. Ejecutar en orden: el registro guarda {{userId}}, {{userEmail}} y {{authToken}}.",
       "item": [
         {
           "name": "Registrar usuario",
@@ -38,14 +38,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users",
+              "raw": "{{baseUrl}}/api/v1/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "body": {
@@ -57,7 +58,7 @@
                 }
               }
             },
-            "description": "Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Responde 201 con AuthResponse: perfil público en user y JWT HS256 en token. Respuestas: 201 usuario creado, 400 datos inválidos, 409 email ya registrado, 500 error interno. El email se genera con la marca de tiempo para poder repetir la corrida."
+            "description": "Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Responde 201 con AuthResponse: perfil público en user y sesión JWT en accessToken, tokenType y expiresIn. Respuestas: 201 usuario creado, 400 datos inválidos, 409 email ya registrado, 500 error interno. El email se genera con la marca de tiempo para poder repetir la corrida."
           },
           "event": [
             {
@@ -76,14 +77,15 @@
                 "exec": [
                   "pm.test('201 Created', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('devuelve AuthResponse con user y token', () => { pm.expect(body).to.have.all.keys('user', 'token'); });",
+                  "pm.test('devuelve AuthResponse con user, accessToken, tokenType y expiresIn', () => { pm.expect(body).to.have.all.keys('user', 'accessToken', 'tokenType', 'expiresIn'); });",
                   "pm.test('devuelve el id del usuario', () => pm.expect(body.user.id).to.be.a('string'));",
                   "pm.test('devuelve el email registrado', () => pm.expect(body.user.email).to.eql(pm.collectionVariables.get('userEmail')));",
                   "pm.test('incluye createdAt', () => pm.expect(body.user.createdAt).to.be.a('string'));",
-                  "pm.test('devuelve un JWT con tres segmentos', () => { pm.expect(body.token).to.be.a('string').and.not.empty; pm.expect(body.token.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('devuelve un accessToken JWT con tres segmentos', () => { pm.expect(body.accessToken).to.be.a('string').and.not.empty; pm.expect(body.accessToken.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('tokenType es Bearer y expiresIn es numérico', () => { pm.expect(body.tokenType).to.eql('Bearer'); pm.expect(body.expiresIn).to.be.a('number'); });",
                   "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; pm.expect(body.user.password).to.be.undefined; pm.expect(body.user.passwordHash).to.be.undefined; });",
                   "pm.collectionVariables.set('userId', body.user.id);",
-                  "pm.collectionVariables.set('authToken', body.token);"
+                  "pm.collectionVariables.set('authToken', body.accessToken);"
                 ]
               }
             }
@@ -100,7 +102,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users",
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -129,7 +131,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\"\n}"
+              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresIn\": 3600\n}"
             }
           ]
         },
@@ -164,7 +166,7 @@
                 }
               }
             },
-            "description": "Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde 200 con AuthResponse: perfil público en user y JWT HS256 en token. Las credenciales incorrectas responden 401 UNAUTHORIZED sin revelar si el email existe. Ejecutar después de 'Registrar usuario' para reutilizar {{userEmail}} y {{userId}}; guarda el nuevo JWT en {{authToken}}."
+            "description": "Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde 200 con AuthResponse: perfil público en user y sesión JWT en accessToken, tokenType y expiresIn. Las credenciales incorrectas responden 401 UNAUTHORIZED sin revelar si el email existe. Ejecutar después de 'Registrar usuario' para reutilizar {{userEmail}} y {{userId}}; guarda el nuevo accessToken en {{authToken}}."
           },
           "event": [
             {
@@ -174,11 +176,12 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('devuelve AuthResponse con user y token', () => { pm.expect(body).to.have.all.keys('user', 'token'); });",
-                  "pm.test('devuelve el mismo usuario del alta', () => pm.expect(body.user.id).to.eql(pm.collectionVariables.get('userId')));",
-                  "pm.test('devuelve un JWT con tres segmentos', () => { pm.expect(body.token).to.be.a('string').and.not.empty; pm.expect(body.token.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('devuelve AuthResponse con user, accessToken, tokenType y expiresIn', () => { pm.expect(body).to.have.all.keys('user', 'accessToken', 'tokenType', 'expiresIn'); });",
+                  "pm.test('devuelve el mismo usuario del registro', () => pm.expect(body.user.id).to.eql(pm.collectionVariables.get('userId')));",
+                  "pm.test('devuelve un accessToken JWT con tres segmentos', () => { pm.expect(body.accessToken).to.be.a('string').and.not.empty; pm.expect(body.accessToken.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('tokenType es Bearer y expiresIn es numérico', () => { pm.expect(body.tokenType).to.eql('Bearer'); pm.expect(body.expiresIn).to.be.a('number'); });",
                   "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; pm.expect(body.user.password).to.be.undefined; pm.expect(body.user.passwordHash).to.be.undefined; });",
-                  "pm.collectionVariables.set('authToken', body.token);"
+                  "pm.collectionVariables.set('authToken', body.accessToken);"
                 ]
               }
             }
@@ -225,7 +228,7 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9...\"\n}"
+              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresIn\": 3600\n}"
             }
           ]
         },
@@ -305,18 +308,18 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/me",
+              "raw": "{{baseUrl}}/api/v1/auth/me",
               "host": [
                 "{{baseUrl}}"
               ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "me"
-              ]
+            "path": [
+              "api",
+              "v1",
+              "auth",
+              "me"
+            ]
             },
-            "description": "Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash. Respuestas: 200 perfil, 401 JWT ausente, inválido o vencido, 404 usuario eliminado, 500 error interno. Requiere haber ejecutado el alta o el login para tener {{authToken}}."
+            "description": "GET /api/v1/auth/me. Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash. Respuestas: 200 perfil, 401 JWT ausente, inválido o vencido, 404 usuario eliminado, 500 error interno. Requiere haber ejecutado el registro o el login para tener {{authToken}}."
           },
           "event": [
             {
@@ -345,14 +348,14 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users/me",
+                  "raw": "{{baseUrl}}/api/v1/auth/me",
                   "host": [
                     "{{baseUrl}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "users",
+                    "auth",
                     "me"
                   ]
                 }
@@ -367,6 +370,74 @@
               ],
               "_postman_previewlanguage": "json",
               "body": "{\n  \"id\": \"6710f3a2c9e77c0012345678\",\n  \"name\": \"Ana Pérez\",\n  \"email\": \"ana.perez@example.com\",\n  \"createdAt\": \"2026-10-22T10:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "POST /api/v1/auth/logout. Cierra la sesión en el cliente: responde siempre 204 No Content, con o sin Authorization, y no revoca el JWT en el servidor. Después del logout, descartar {{authToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));",
+                  "pm.test('sin cuerpo', () => pm.expect(pm.response.text()).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "204 - sesión finalizada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer eyJhbGciOiJIUzI1NiJ9..."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/logout",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "logout"
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "_postman_previewlanguage": "json",
+              "body": ""
             }
           ]
         }
@@ -387,14 +458,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users",
+              "raw": "{{baseUrl}}/api/v1/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "body": {
@@ -435,7 +507,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users",
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -479,14 +551,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users",
+              "raw": "{{baseUrl}}/api/v1/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "body": {
@@ -527,7 +600,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users",
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -571,14 +644,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users",
+              "raw": "{{baseUrl}}/api/v1/auth/register",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "users"
+                "auth",
+                "register"
               ]
             },
             "body": {
@@ -631,7 +705,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users",
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
                   "host": [
                     "{{baseUrl}}"
                   ],
@@ -774,7 +848,7 @@
                   "pm.test('código UNAUTHORIZED', () => pm.expect(body.code).to.eql('UNAUTHORIZED'));",
                   "pm.test('mensaje genérico de credenciales', () => pm.expect(body.message).to.eql('Credenciales inválidas'));",
                   "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);",
-                  "pm.test('no devuelve token', () => pm.expect(body.token).to.be.undefined);"
+                  "pm.test('no devuelve accessToken', () => pm.expect(body.accessToken).to.be.undefined);"
                 ]
               }
             }
@@ -831,18 +905,18 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/me",
+              "raw": "{{baseUrl}}/api/v1/auth/me",
               "host": [
                 "{{baseUrl}}"
               ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "me"
-              ]
+            "path": [
+              "api",
+              "v1",
+              "auth",
+              "me"
+            ]
             },
-            "description": "Invoca GET /api/v1/users/me sin la cabecera Authorization. Responde 401 UNAUTHORIZED con el contrato uniforme y details vacío."
+            "description": "Invoca GET /api/v1/auth/me sin la cabecera Authorization. Responde 401 UNAUTHORIZED con el contrato uniforme y details vacío."
           },
           "event": [
             {
@@ -865,14 +939,14 @@
                 "method": "GET",
                 "header": [],
                 "url": {
-                  "raw": "{{baseUrl}}/api/v1/users/me",
+                  "raw": "{{baseUrl}}/api/v1/auth/me",
                   "host": [
                     "{{baseUrl}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "users",
+                    "auth",
                     "me"
                   ]
                 }

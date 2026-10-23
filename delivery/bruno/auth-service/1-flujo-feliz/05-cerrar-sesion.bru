@@ -1,0 +1,25 @@
+meta {
+  name: Cerrar sesión
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{authToken}}
+}
+
+assert {
+  res.status: eq 204
+}
+
+docs {
+  POST /api/v1/auth/logout. Cierra la sesión en el cliente: responde siempre 204 No Content, con o sin Authorization, y no revoca el JWT en el servidor.
+
+  Después del logout, descartar authToken. Requiere haber ejecutado el registro o el login para tener un token, aunque el endpoint también responde 204 sin él.
+}

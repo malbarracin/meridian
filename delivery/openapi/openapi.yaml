@@ -107,10 +107,17 @@ paths:
         el mismo error tanto si el email no existe como si la contraseña es incorrecta.
       operationId: login
       requestBody:
+        description: Credenciales del usuario ya registrado.
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/LoginRequest"
+            examples:
+              Credenciales válidas:
+                description: Credenciales válidas
+                value:
+                  email: ana.perez@example.com
+                  password: password123
         required: true
       responses:
         "200":
@@ -156,7 +163,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-              example: null
+              example:
+                code: INTERNAL_ERROR
+                message: Error interno
+                details: []
+                timestamp: 2026-10-22T10:05:00Z
   /api/v1/users/{id}:
     get:
       tags:
@@ -252,14 +263,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-              example: null
+              example:
+                code: NOT_FOUND
+                message: "Usuario no encontrado por id: 6710f3a2c9e77c0012345678"
+                details: []
+                timestamp: 2026-10-22T10:05:00Z
         "500":
           description: Error interno
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-              example: null
+              example:
+                code: INTERNAL_ERROR
+                message: Error interno
+                details: []
+                timestamp: 2026-10-22T10:05:00Z
       security:
       - bearerAuth: []
 components:

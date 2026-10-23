@@ -5,7 +5,7 @@ meta {
 }
 
 post {
-  url: {{baseUrl}}/api/v1/users
+  url: {{baseUrl}}/api/v1/auth/register
   body: json
   auth: none
 }
@@ -30,18 +30,20 @@ assert {
   res.status: eq 201
   res.body.user.id: isString
   res.body.user.email: isString
-  res.body.token: isString
+  res.body.accessToken: isString
+  res.body.tokenType: eq Bearer
+  res.body.expiresIn: isNumber
 }
 
 script:post-response {
   bru.setVar("userId", res.body.user.id);
-  bru.setVar("authToken", res.body.token);
+  bru.setVar("authToken", res.body.accessToken);
 }
 
 docs {
-  Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt.
+  POST /api/v1/auth/register. Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt.
 
-  Respuestas: 201 AuthResponse (user + token JWT HS256), 400 datos inválidos, 409 email ya registrado, 500 error interno.
+  Respuestas: 201 AuthResponse (user + accessToken/tokenType/expiresIn), 400 datos inválidos, 409 email ya registrado, 500 error interno.
 
-  Genera un email único por corrida y guarda el id en userId y el JWT en authToken para los pedidos siguientes. El token devuelto es real en cada ejecución: no copiarlo a documentación ni tickets.
+  Genera un email único por corrida y guarda el id en userId y el accessToken en authToken para los pedidos siguientes. El token devuelto es real en cada ejecución: no copiarlo a documentación ni tickets.
 }

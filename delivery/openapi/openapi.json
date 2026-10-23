@@ -143,10 +143,20 @@
         "description" : "Normaliza el email y verifica la contraseña con BCrypt. Devuelve un JWT y los datos públicos del usuario. Las credenciales incorrectas reciben el mismo error tanto si el email no existe como si la contraseña es incorrecta.",
         "operationId" : "login",
         "requestBody" : {
+          "description" : "Credenciales del usuario ya registrado.",
           "content" : {
             "application/json" : {
               "schema" : {
                 "$ref" : "#/components/schemas/LoginRequest"
+              },
+              "examples" : {
+                "Credenciales válidas" : {
+                  "description" : "Credenciales válidas",
+                  "value" : {
+                    "email" : "ana.perez@example.com",
+                    "password" : "password123"
+                  }
+                }
               }
             }
           },
@@ -215,7 +225,12 @@
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 },
-                "example" : null
+                "example" : {
+                  "code" : "INTERNAL_ERROR",
+                  "message" : "Error interno",
+                  "details" : [ ],
+                  "timestamp" : "2026-10-22T10:05:00Z"
+                }
               }
             }
           }
@@ -349,7 +364,12 @@
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 },
-                "example" : null
+                "example" : {
+                  "code" : "NOT_FOUND",
+                  "message" : "Usuario no encontrado por id: 6710f3a2c9e77c0012345678",
+                  "details" : [ ],
+                  "timestamp" : "2026-10-22T10:05:00Z"
+                }
               }
             }
           },
@@ -360,7 +380,12 @@
                 "schema" : {
                   "$ref" : "#/components/schemas/ErrorResponse"
                 },
-                "example" : null
+                "example" : {
+                  "code" : "INTERNAL_ERROR",
+                  "message" : "Error interno",
+                  "details" : [ ],
+                  "timestamp" : "2026-10-22T10:05:00Z"
+                }
               }
             }
           }

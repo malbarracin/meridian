@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/v1/users/me
+  url: {{baseUrl}}/api/v1/auth/me
   body: none
   auth: none
 }
@@ -21,9 +21,9 @@ assert {
 }
 
 docs {
-  Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash.
+  GET /api/v1/auth/me. Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash.
 
   Respuestas: 200 perfil, 401 JWT ausente, inválido o vencido, 404 usuario eliminado, 500 error interno.
 
-  Requiere haber ejecutado el alta o el login para tener authToken.
+  Requiere haber ejecutado el registro o el login para tener authToken.
 }

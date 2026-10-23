@@ -24,17 +24,19 @@ body:json {
 assert {
   res.status: eq 200
   res.body.user.id: isString
-  res.body.token: isString
+  res.body.accessToken: isString
+  res.body.tokenType: eq Bearer
+  res.body.expiresIn: isNumber
 }
 
 script:post-response {
-  bru.setVar("authToken", res.body.token);
+  bru.setVar("authToken", res.body.accessToken);
 }
 
 docs {
-  Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde 200 con AuthResponse: perfil público en user y JWT HS256 en token.
+  POST /api/v1/auth/login. Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde 200 con AuthResponse: perfil público en user y sesión JWT en accessToken, tokenType y expiresIn.
 
   Respuestas: 200 sesión iniciada, 400 datos inválidos, 401 credenciales incorrectas, 500 error interno. El 401 usa el mismo mensaje genérico tanto si el email no existe como si la contraseña no coincide.
 
-  Requiere haber ejecutado "Registrar usuario" para tener userEmail; guarda el nuevo JWT en authToken para el pedido GET /me.
+  Requiere haber ejecutado "Registrar usuario" para tener userEmail; guarda el nuevo accessToken en authToken para el pedido GET /api/v1/auth/me.
 }

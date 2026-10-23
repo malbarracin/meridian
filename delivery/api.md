@@ -15,7 +15,9 @@ Los ejemplos usan el mismo usuario que Swagger, Postman y Bruno:
 | email | `ana.perez@example.com` |
 | password | `password123` (mínimo 8 caracteres) |
 | createdAt | `2026-10-22T10:00:00Z` |
-| token | `eyJhbGciOiJIUzI1NiJ9...` (marcador de ejemplo; no es un token real) |
+| accessToken | `eyJhbGciOiJIUzI1NiJ9...` (marcador de ejemplo; no es un token real) |
+| tokenType | `Bearer` |
+| expiresIn | `3600` (segundos; con `JWT_EXPIRATION_MS` por defecto son 86400) |
 
 > En Windows, `curl` es un alias de `Invoke-WebRequest` en PowerShell 5.1. Usar `curl.exe` para los
 > comandos de abajo. En Linux/macOS usar `curl` normalmente.
@@ -24,12 +26,13 @@ Los ejemplos usan el mismo usuario que Swagger, Postman y Bruno:
 
 - Request y response: `Content-Type: application/json`.
 - Fechas: ISO-8601 en UTC (`2026-10-22T10:00:00Z`).
-- La contraseña viaja en texto plano solo en el alta y en el login; el servicio la guarda como hash BCrypt.
+- La contraseña viaja en texto plano solo en el registro y en el login; el servicio la guarda como hash BCrypt.
 - El email se normaliza (trim y minúsculas) antes de persistirse.
-- Si se repite el mismo email, la API responde `409 CONFLICT`; para volver a probar el alta usar un
+- Si se repite el mismo email, la API responde `409 CONFLICT`; para volver a probar el registro usar un
   email distinto.
 - Los ejemplos de token son marcadores (`eyJhbGciOiJIUzI1NiJ9...`): la API real devuelve un JWT
-  firmado distinto en cada alta. No copiar tokens reales a documentación, tickets ni repositorios.
+  firmado distinto en cada registro o login. No copiar tokens reales a documentación, tickets ni
+  repositorios.
 
 ## Configuración JWT
 
@@ -45,10 +48,25 @@ pública exclusiva de desarrollo. Fuera de ese entorno, aprovisionar `JWT_SECRET
 secretos y rotarla si se sospecha exposición. En producción, Helm la toma del Secret externo
 `auth-jwt` (ver `delivery/devops-local.md`). No versionar claves reales.
 
-## POST /api/v1/users — registrar usuario
+## Usuario de demo (seed)
+
+En los perfiles `dev`, `docker` y `test` (nunca en `prod`) el servicio crea un usuario de demo al
+arrancar, de forma idempotente:
+
+| Campo | Valor por defecto |
+|---|---|
+| email | `demo@example.com` |
+| password | `DemoPass123!` |
+| name | `Demo` |
+
+Se configura con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD`; se desactiva arrancando sin esos perfiles.
+Las credenciales por defecto son públicas y solo para entornos no productivos. Sirven para probar el
+login y los endpoints autenticados sin registrar un usuario nuevo.
+
+## POST /api/v1/auth/register — registrar usuario
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/users \
+curl -i -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Ana Pérez",
@@ -67,16 +85,19 @@ Respuesta `201 Created` (`AuthResponse`):
     "email": "ana.perez@example.com",
     "createdAt": "2026-10-22T10:00:00Z"
   },
-  "token": "eyJhbGciOiJIUzI1NiJ9..."
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
 }
 ```
 
 - `user`: perfil público del usuario persistido. No incluye `password` ni `passwordHash`.
-- `token`: JWT firmado con HS256. Claims `sub` (id del usuario), `email` (normalizado), `iat` y
+- `accessToken`: JWT firmado con HS256. Claims `sub` (id del usuario), `email` (normalizado), `iat` y
   `exp` (`JWT_EXPIRATION_MS`). El valor de este ejemplo es un marcador, no un token real.
-- Uso previsto: `Authorization: Bearer <token>` en `GET /api/v1/users/me` y en los servicios que
+- `tokenType`: siempre `Bearer`. `expiresIn`: vigencia del token en segundos.
+- Uso previsto: `Authorization: Bearer <accessToken>` en `GET /api/v1/auth/me` y en los servicios que
   consuman el JWT. No hay un endpoint dedicado a validar tokens: la validación ocurre al invocar
-  `GET /api/v1/users/me`.
+  `GET /api/v1/auth/me`.
 - La cabecera `Location` apunta a `GET /api/v1/users/{id}` con el id creado.
 
 ### Errores posibles
@@ -85,7 +106,7 @@ Respuesta `201 Created` (`AuthResponse`):
 menos de 8 caracteres):
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/users \
+curl -i -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Ana Pérez","email":"invalido","password":"password123"}'
 ```
@@ -107,7 +128,7 @@ curl -i -X POST http://localhost:8080/api/v1/users \
 `400 BAD_REQUEST` — JSON mal formado:
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/users \
+curl -i -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Ana Pérez",'
 ```
@@ -124,7 +145,7 @@ curl -i -X POST http://localhost:8080/api/v1/users \
 `409 CONFLICT` — el email ya está registrado:
 
 ```bash
-curl -i -X POST http://localhost:8080/api/v1/users \
+curl -i -X POST http://localhost:8080/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Otra Ana","email":"ana.perez@example.com","password":"password123"}'
 ```
@@ -152,7 +173,7 @@ curl -i -X POST http://localhost:8080/api/v1/users \
 ## POST /api/v1/auth/login — iniciar sesión
 
 Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde el mismo `AuthResponse`
-del alta:
+del registro:
 
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/auth/login \
@@ -173,19 +194,22 @@ Respuesta `200 OK` (`AuthResponse`):
     "email": "ana.perez@example.com",
     "createdAt": "2026-10-22T10:00:00Z"
   },
-  "token": "eyJhbGciOiJIUzI1NiJ9..."
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
 }
 ```
 
-- El email se normaliza (trim y minúsculas) antes de buscar al usuario, igual que en el alta.
-- `token` es un JWT HS256 con los mismos claims del alta (`sub`, `email`, `iat`, `exp`). El valor de
-  este ejemplo es un marcador: usar el token real que devuelve la respuesta.
-- Guardar el token para el pedido siguiente (`GET /api/v1/users/me`).
+- El email se normaliza (trim y minúsculas) antes de buscar al usuario, igual que en el registro.
+- `accessToken` es un JWT HS256 con los mismos claims del registro (`sub`, `email`, `iat`, `exp`). El
+  valor de este ejemplo es un marcador: usar el token real que devuelve la respuesta.
+- `tokenType` es `Bearer` y `expiresIn` la vigencia en segundos.
+- Guardar el `accessToken` para el pedido siguiente (`GET /api/v1/auth/me`).
 
 ### Errores posibles
 
 `400 VALIDATION_ERROR` — email mal formado, email o contraseña en blanco o ausentes: mismo JSON
-genérico de validación que en el alta (ver arriba).
+genérico de validación que en el registro (ver arriba).
 
 `401 UNAUTHORIZED` — credenciales incorrectas. El mismo error se devuelve si el email no existe o si
 la contraseña no coincide, para no revelar qué parte falló:
@@ -205,15 +229,15 @@ curl -i -X POST http://localhost:8080/api/v1/auth/login \
 }
 ```
 
-`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del alta.
+`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del registro.
 
-## GET /api/v1/users/me — perfil autenticado
+## GET /api/v1/auth/me — perfil autenticado
 
 Devuelve el perfil persistido del usuario identificado por el `sub` del JWT. Requiere la cabecera
-`Authorization` con el token emitido por el alta o el login:
+`Authorization` con el `accessToken` emitido por el registro o el login:
 
 ```bash
-curl -i http://localhost:8080/api/v1/users/me \
+curl -i http://localhost:8080/api/v1/auth/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
@@ -237,7 +261,7 @@ Respuesta `200 OK` (`UserResponse`):
 token vencido:
 
 ```bash
-curl -i http://localhost:8080/api/v1/users/me
+curl -i http://localhost:8080/api/v1/auth/me
 ```
 
 ```json
@@ -260,7 +284,19 @@ curl -i http://localhost:8080/api/v1/users/me
 }
 ```
 
-`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del alta.
+`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del registro.
+
+## POST /api/v1/auth/logout — cerrar sesión
+
+El cliente descarta su `accessToken`. El servidor no revoca JWT en esta implementación: responde
+siempre `204 No Content`, con o sin cabecera `Authorization`, incluso con un token inválido.
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
+Respuesta `204 No Content`, sin cuerpo.
 
 ## GET /api/v1/users/{id} — consultar usuario
 
@@ -298,7 +334,7 @@ curl -i http://localhost:8080/api/v1/users/6710f3a2c9e77c00ffffffff
 }
 ```
 
-`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del alta.
+`500 INTERNAL_ERROR` — error inesperado, con el mismo JSON genérico del registro.
 
 ## GET /actuator/health — estado del servicio
 

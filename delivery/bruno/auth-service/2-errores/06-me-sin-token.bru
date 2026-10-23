@@ -1,11 +1,11 @@
 meta {
   name: Perfil sin token
   type: http
-  seq: 10
+  seq: 11
 }
 
 get {
-  url: {{baseUrl}}/api/v1/users/me
+  url: {{baseUrl}}/api/v1/auth/me
   body: none
   auth: none
 }
@@ -16,5 +16,5 @@ assert {
 }
 
 docs {
-  Invoca GET /api/v1/users/me sin la cabecera Authorization. Responde 401 UNAUTHORIZED con el contrato uniforme y details vacío.
+  Invoca GET /api/v1/auth/me sin la cabecera Authorization. Responde 401 UNAUTHORIZED con el contrato uniforme y details vacío.
 }

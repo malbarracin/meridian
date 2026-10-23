@@ -30,7 +30,8 @@ com.meridian.users
 │   ├── OpenApiConfig.java          # metadatos y ejemplos OpenAPI
 │   ├── JwtConfig.java              # jwt.secret y jwt.expiration-ms
 │   ├── SecurityConfig.java         # PasswordEncoder BCrypt
-│   └── UserIndexConfig.java        # índice único de email en prod
+│   ├── UserIndexConfig.java        # índice único de email en prod
+│   └── DemoUserSeeder.java         # seed idempotente (perfiles no productivos)
 ├── exception/                      # contrato de error transversal
 │   ├── ErrorResponse.java          # record code/message/details/timestamp
 │   ├── FieldError.java             # record field/message
@@ -41,8 +42,8 @@ com.meridian.users
 │   └── UnauthorizedException.java  # base para credenciales/JWT inválidos
 └── user/
     ├── controller/
-    │   ├── AuthController.java     # @RequestMapping("/api/v1/auth") → POST /login
-    │   └── UserController.java     # @RequestMapping("/api/v1/users") → GET /me y /{id}, POST
+    │   ├── AuthController.java     # /api/v1/auth → register, login, me, logout
+    │   └── UserController.java     # /api/v1/users → GET /{id}
     ├── service/
     │   ├── UserService.java        # registro, login y consulta
     │   └── JwtService.java         # emisión y validación HS256
@@ -56,7 +57,7 @@ com.meridian.users
     │   ├── RegisterRequest.java    # name, email, password
     │   ├── LoginRequest.java       # email, password
     │   ├── UserResponse.java       # id, name, email, createdAt
-    │   └── AuthResponse.java       # user + token
+    │   └── AuthResponse.java       # user, accessToken, tokenType, expiresIn
     └── exception/
         ├── DuplicateUserException.java
         ├── InvalidCredentialsException.java
@@ -80,10 +81,11 @@ Cada módulo de dominio usa subpaquetes por capa (`controller`, `service`, `repo
 | Repository | `UserRepository` | Persistencia en MongoDB y búsqueda por email | Reglas de negocio |
 | Mapper | `UserMapper` | Convierte `User` → `UserResponse` (MapStruct) | Reglas de negocio |
 | Entity | `User` | Documento persistido en la colección `users` | Exponerse por la API |
-| DTO | `RegisterRequest`, `LoginRequest`, `UserResponse`, `AuthResponse` | Contrato HTTP de entrada y salida | Lógica de negocio |
+| DTO | `RegisterRequest`, `LoginRequest`, `UserResponse`, `AuthResponse` | Contrato HTTP de entrada y salida (`AuthResponse` con `accessToken`/`tokenType`/`expiresIn`) | Lógica de negocio |
 
-`User` no se expone: el controller devuelve `AuthResponse` en el alta y en el login (con
-`UserResponse` embebido y el JWT) y `UserResponse` en las consultas. Ninguno incluye `passwordHash`.
+`User` no se expone: el controller devuelve `AuthResponse` en el registro y en el login (con
+`UserResponse` embebido, `accessToken`, `tokenType` y `expiresIn`) y `UserResponse` en las consultas.
+Ninguno incluye `passwordHash`. El logout no devuelve cuerpo (`204`).
 
 ## Modelo persistido
 
@@ -106,9 +108,10 @@ se genera en cada alta y en cada login a partir del id y el email del usuario.
 
 | Método | Ruta | Request | Respuesta OK | Errores |
 |---|---|---|---|---|
-| POST | `/api/v1/users` | `RegisterRequest` | `201` + `AuthResponse` (`user` + `token`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 409 `CONFLICT`, 500 `INTERNAL_ERROR` |
-| POST | `/api/v1/auth/login` | `LoginRequest` | `200` + `AuthResponse` (`user` + `token`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 401 `UNAUTHORIZED`, 500 `INTERNAL_ERROR` |
-| GET | `/api/v1/users/me` | `Authorization: Bearer <token>` | `200` + `UserResponse` | 401 `UNAUTHORIZED`, 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
+| POST | `/api/v1/auth/register` | `RegisterRequest` | `201` + `AuthResponse` (`user`, `accessToken`, `tokenType`, `expiresIn`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 409 `CONFLICT`, 500 `INTERNAL_ERROR` |
+| POST | `/api/v1/auth/login` | `LoginRequest` | `200` + `AuthResponse` (`user`, `accessToken`, `tokenType`, `expiresIn`) | 400 `VALIDATION_ERROR`, 400 `BAD_REQUEST`, 401 `UNAUTHORIZED`, 500 `INTERNAL_ERROR` |
+| GET | `/api/v1/auth/me` | `Authorization: Bearer <accessToken>` | `200` + `UserResponse` | 401 `UNAUTHORIZED`, 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
+| POST | `/api/v1/auth/logout` | Opcional `Authorization: Bearer <accessToken>` | `204 No Content` (sin revocación en el servidor) | — |
 | GET | `/api/v1/users/{id}` | `id` en el path | `200` + `UserResponse` | 404 `NOT_FOUND`, 500 `INTERNAL_ERROR` |
 | GET | `/actuator/health` | — | `200` + `{"status":"UP"}` | — |
 
@@ -116,10 +119,10 @@ Especificación completa: `delivery/openapi/openapi.json` / `openapi.yaml`.
 
 ## Flujo de una petición
 
-### POST /api/v1/users
+### POST /api/v1/auth/register
 
 ```text
-UserController.registerUser(@Valid RegisterRequest)
+AuthController.registerUser(@Valid RegisterRequest)
   → UserService.register(RegisterRequest)
       normaliza email: trim + minúsculas
       UserRepository.findByEmail(email) → si existe, DuplicateUserException (409)
@@ -128,13 +131,14 @@ UserController.registerUser(@Valid RegisterRequest)
       UserRepository.save(User) → DuplicateKeyException si el índice unique falla (409)
       UserMapper.toResponse(User)
       JwtService.generateToken(id, email) → JWT HS256 (sub, email, iat, exp)
-  ← AuthResponse(UserResponse, token)
+  ← AuthResponse(UserResponse, accessToken, tokenType, expiresIn)
 ← 201 Created + AuthResponse + Location
 ```
 
 El JWT se firma con `jwt.secret` (`JWT_SECRET`, mínimo 32 bytes) y vence según `jwt.expiration-ms`
-(`JWT_EXPIRATION_MS`, 24 horas por defecto). `JwtService.isValid` verifica firma HS256 y expiración;
-no hay un endpoint dedicado a validar tokens: la validación ocurre en `GET /api/v1/users/me`.
+(`JWT_EXPIRATION_MS`, 24 horas por defecto). `AuthResponse` expone `accessToken`, `tokenType` y
+`expiresIn` (calculado en segundos). `JwtService.isValid` verifica firma HS256 y expiración; no hay
+un endpoint dedicado a validar tokens: la validación ocurre en `GET /api/v1/auth/me`.
 
 ### POST /api/v1/auth/login
 
@@ -146,17 +150,17 @@ AuthController.login(@Valid LoginRequest)
       PasswordEncoder.matches(password, passwordHash) → si no coincide, InvalidCredentialsException (401)
       JwtService.generateToken(id, email) → JWT HS256 (sub, email, iat, exp)
       UserMapper.toResponse(User)
-  ← AuthResponse(UserResponse, token)
+  ← AuthResponse(UserResponse, accessToken, tokenType, expiresIn)
 ← 200 OK + AuthResponse
 ```
 
 El mismo `401 UNAUTHORIZED` con mensaje genérico cubre email inexistente y contraseña incorrecta, para
 no revelar qué parte de la credencial falló.
 
-### GET /api/v1/users/me
+### GET /api/v1/auth/me
 
 ```text
-UserController.getMe(Authorization: Bearer <token>)
+AuthController.getMe(Authorization: Bearer <accessToken>)
   si falta la cabecera o no empieza con "Bearer ", InvalidCredentialsException (401)
   → UserService.getByToken(token sin prefijo)
       JwtService.extractUserId(token)
@@ -165,6 +169,13 @@ UserController.getMe(Authorization: Bearer <token>)
         UserRepository.findById(id) → si no existe, UserNotFoundException (404)
         UserMapper.toResponse(User)
   ← 200 OK + UserResponse
+```
+
+### POST /api/v1/auth/logout
+
+```text
+AuthController.logout()
+  → 204 No Content (sin lógica de negocio, sin revocación de JWT en el servidor)
 ```
 
 ### GET /api/v1/users/{id}
@@ -243,6 +254,11 @@ Perfiles:
 | `docker` | Se crea automáticamente | Docker Compose |
 | `test` | Se crea automáticamente | Tests con MongoDB embebido (Flapdoodle) o Testcontainers |
 | `prod` | Desactivado; lo crea el operador | Producción |
+
+`DemoUserSeeder` (`@Profile("(dev | docker | test) & !prod")`) crea al arranque un usuario de demo
+idempotente (`demo@example.com` / `DemoPass123!` por defecto; configurable con `SEED_DEMO_EMAIL` y
+`SEED_DEMO_PASSWORD`). Si el email ya existe, no lo modifica. Con `prod` o sin esos perfiles el bean
+no se registra. Las credenciales por defecto son públicas y solo para entornos no productivos.
 
 En `prod`, Swagger UI y el endpoint de OpenAPI están deshabilitados (`springdoc.swagger-ui.enabled`
 y `springdoc.api-docs.enabled` en `false`).

@@ -57,30 +57,38 @@ nada antes de correr el Collection Runner.
 
 | # | Carpeta / pedido | Método y ruta | Resultado esperado |
 |---|---|---|---|
-| 1 | 1. Flujo feliz → Registrar usuario | `POST /api/v1/users` | `201`, `AuthResponse`: `user` (`id`, `name`, `email`, `createdAt`) y `token` no vacío de 3 segmentos; guarda `userId`, `userEmail` y `authToken` |
-| 2 | 1. Flujo feliz → Iniciar sesión | `POST /api/v1/auth/login` | `200`, `AuthResponse` con el mismo `user.id` y `token` de 3 segmentos; guarda `authToken` |
+| 1 | 1. Flujo feliz → Registrar usuario | `POST /api/v1/auth/register` | `201`, `AuthResponse`: `user` (`id`, `name`, `email`, `createdAt`), `accessToken` de 3 segmentos, `tokenType = Bearer` y `expiresIn` numérico; guarda `userId`, `userEmail` y `authToken` |
+| 2 | 1. Flujo feliz → Iniciar sesión | `POST /api/v1/auth/login` | `200`, `AuthResponse` con el mismo `user.id`, `accessToken` de 3 segmentos, `tokenType = Bearer` y `expiresIn`; guarda `authToken` |
 | 3 | 1. Flujo feliz → Consultar usuario por id | `GET /api/v1/users/{{userId}}` | `200`, mismo usuario, sin `password` ni `passwordHash` |
-| 4 | 1. Flujo feliz → Consultar mi perfil | `GET /api/v1/users/me` con `Bearer {{authToken}}` | `200`, perfil del token: `id = {{userId}}`, sin `password` ni `passwordHash` |
-| 5 | 2. Errores → Alta con email inválido | `POST /api/v1/users` | `400`, `code = VALIDATION_ERROR`, `details[0].field = email` |
-| 6 | 2. Errores → Alta con JSON mal formado | `POST /api/v1/users` | `400`, `code = BAD_REQUEST`, `details` vacío |
-| 7 | 2. Errores → Alta con email duplicado | `POST /api/v1/users` | `409`, `code = CONFLICT`, mensaje `Email ya registrado` |
-| 8 | 2. Errores → Consultar usuario inexistente | `GET /api/v1/users/6710f3a2c9e77c00ffffffff` | `404`, `code = NOT_FOUND` |
-| 9 | 2. Errores → Login con credenciales inválidas | `POST /api/v1/auth/login` con contraseña incorrecta | `401`, `code = UNAUTHORIZED`, mensaje `Credenciales inválidas`, `details` vacío |
-| 10 | 2. Errores → Perfil sin token | `GET /api/v1/users/me` sin `Authorization` | `401`, `code = UNAUTHORIZED`, `details` vacío |
-| 11 | 3. Salud → Health check | `GET /actuator/health` | `200`, `status = UP` |
+| 4 | 1. Flujo feliz → Consultar mi perfil | `GET /api/v1/auth/me` con `Bearer {{authToken}}` | `200`, perfil del token: `id = {{userId}}`, sin `password` ni `passwordHash` |
+| 5 | 1. Flujo feliz → Cerrar sesión | `POST /api/v1/auth/logout` con `Bearer {{authToken}}` | `204`, sin cuerpo (el servidor no revoca el JWT) |
+| 6 | 2. Errores → Alta con email inválido | `POST /api/v1/auth/register` | `400`, `code = VALIDATION_ERROR`, `details[0].field = email` |
+| 7 | 2. Errores → Alta con JSON mal formado | `POST /api/v1/auth/register` | `400`, `code = BAD_REQUEST`, `details` vacío |
+| 8 | 2. Errores → Alta con email duplicado | `POST /api/v1/auth/register` | `409`, `code = CONFLICT`, mensaje `Email ya registrado` |
+| 9 | 2. Errores → Consultar usuario inexistente | `GET /api/v1/users/6710f3a2c9e77c00ffffffff` | `404`, `code = NOT_FOUND` |
+| 10 | 2. Errores → Login con credenciales inválidas | `POST /api/v1/auth/login` con contraseña incorrecta | `401`, `code = UNAUTHORIZED`, mensaje `Credenciales inválidas`, `details` vacío |
+| 11 | 2. Errores → Perfil sin token | `GET /api/v1/auth/me` sin `Authorization` | `401`, `code = UNAUTHORIZED`, `details` vacío |
+| 12 | 3. Salud → Health check | `GET /actuator/health` | `200`, `status = UP` |
 
-**Importante:** el pedido 7 reutiliza el email creado en el pedido 1 y el pedido 4 reutiliza su
-token. Si se ejecutan sueltos, el duplicado puede devolver `400` porque `{{userEmail}}` está vacío y
-`/me` puede devolver `401` porque `{{authToken}}` no existe. Correr la colección completa en orden.
+**Importante:** el pedido 8 reutiliza el email creado en el pedido 1 y el pedido 4 reutiliza su
+`accessToken`. Si se ejecutan sueltos, el duplicado puede devolver `400` porque `{{userEmail}}` está
+vacío y `/me` puede devolver `401` porque `{{authToken}}` no existe. Correr la colección completa en
+orden.
 
 ### JWT y perfil autenticado
 
-El alta y el login devuelven `token` además del perfil `user`. Los tests verifican el status (`201` y
-`200`), que el token sea un string no vacío con tres segmentos separados por puntos, que `user.id`
-coincida con el registrado y que no aparezca `password` ni `passwordHash` en la respuesta. El pedido
-`GET /api/v1/users/me` usa `Authorization: Bearer {{authToken}}` y comprueba que devuelve el perfil
-del `id` registrado. Los errores de login y de token ausente o inválido se validan con `401
-UNAUTHORIZED` y `details` vacío. No copiar tokens reales a tickets, capturas ni repositorios.
+El registro y el login devuelven `accessToken`, `tokenType` y `expiresIn` además del perfil `user`.
+Los tests verifican el status (`201` y `200`), que `accessToken` sea un string no vacío con tres
+segmentos separados por puntos, que `tokenType` sea `Bearer`, que `expiresIn` sea numérico, que
+`user.id` coincida con el registrado y que no aparezca `password` ni `passwordHash` en la respuesta. El
+pedido `GET /api/v1/auth/me` usa `Authorization: Bearer {{authToken}}` y comprueba que devuelve el
+perfil del `id` registrado. El logout valida `204` sin cuerpo. Los errores de login y de token ausente
+o inválido se validan con `401 UNAUTHORIZED` y `details` vacío. No copiar tokens reales a tickets,
+capturas ni repositorios.
+
+En los perfiles `dev`, `docker` y `test` el servicio crea un usuario de demo (`demo@example.com` /
+`DemoPass123!`) al arrancar. Se puede usar para repetir el login y `/me` sin registrar un usuario
+nuevo; se configura con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD` y no existe con `prod`.
 
 ### Collection Runner
 
@@ -110,10 +118,8 @@ newman run delivery/postman/auth-service.postman_collection.json `
 4. Ejecutar la colección completa (**Run Collection**) o los pedidos en el orden del árbol:
    `1-flujo-feliz` → `2-errores` → `3-salud`.
 
-Los pedidos, nombres, orden y datos son los mismos que en Postman. El alta genera `userEmail` y
-guarda `userId` y `authToken` en variables de la corrida; el login y `/me` reutilizan esas variables,
-y el pedido de email duplicado depende del alta previa. El JWT del ejemplo es un marcador: el valor
-real cambia en cada ejecución.
+Los pedidos, nombres, orden y datos son los mismos que en Postman. El registro genera `userEmail` y
+guarda `userId` y `authToken` (accessToken) en variables de la corrida; el login, `GET /api/v1/auth/me` y `POST /api/v1/auth/logout` reutilizan esas variables, y el pedido de email duplicado depende del registro previo. El token del ejemplo es un marcador: el valor real cambia en cada ejecución. También se puede usar el usuario de demo (`demo@example.com` / `DemoPass123!`) cuando el seed está activo.
 
 ### Importar desde Postman u OpenAPI
 
@@ -149,9 +155,9 @@ genera un email nuevo en cada corrida.
 | El arranque falla por JWT | `JWT_SECRET` mide menos de 32 bytes o no es válida para HS256 | Usar una clave de al menos 32 caracteres; revisar `JwtConfigTest` |
 | `Connection refused` en Postman | El servicio no está escuchando en `baseUrl` | Puerto, perfil y logs de arranque |
 | `health` devuelve `DOWN` | MongoDB no accesible | `MONGO_URI`, contenedor de Mongo y credenciales del entorno |
-| El alta devuelve `409` al repetir | El email ya existe | Usar otro email o limpiar la base de prueba |
-| El pedido de duplicado devuelve `400` | Se ejecutó sin el alta previa | Correr la colección completa en orden |
-| `GET /me` devuelve `401` | Se ejecutó sin login/alta previa o el token venció | Correr la colección completa en orden o repetir el login |
+| El registro devuelve `409` al repetir | El email ya existe | Usar otro email o limpiar la base de prueba |
+| El pedido de duplicado devuelve `400` | Se ejecutó sin el registro previo | Correr la colección completa en orden |
+| `GET /api/v1/auth/me` devuelve `401` | Se ejecutó sin login/registro previo o el token venció | Correr la colección completa en orden o repetir el login |
 | `verify` falla con `Could not find a valid Docker environment` | Docker no está accesible para Maven | Arrancar Docker y revisar `delivery/testing.md` |
 | Swagger UI no abre en `prod` | Deshabilitado a propósito | Usar perfil local/dev o `delivery/openapi/` |
 

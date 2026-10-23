@@ -2,19 +2,24 @@
 
 Servicio REST que registra usuarios, autentica credenciales y consulta los datos públicos de usuarios,
 con persistencia en MongoDB. Normaliza el email antes de guardarlo, garantiza su unicidad, hashea la
-contraseña con BCrypt y emite un JWT de acceso firmado (HS256) en el alta y en el login. El perfil
-autenticado se consulta con ese token. Nunca devuelve la contraseña ni su hash. Forma parte del sistema
-Meridian y es consumido por otros equipos para el alta, el login y la consulta de usuarios.
+contraseña con BCrypt y emite un JWT de acceso firmado (HS256) en el registro y en el login. El perfil
+autenticado se consulta con ese token y el logout lo descarta del lado del cliente. Nunca devuelve la
+contraseña ni su hash. Forma parte del sistema Meridian y es consumido por otros equipos para el alta,
+el login, la consulta de perfil y el cierre de sesión.
 
 ## Funcionalidades
 
-- Alta de usuario: `POST /api/v1/users` (nombre, email y contraseña) → `AuthResponse` con el perfil
-  público (`user`) y el JWT de acceso (`token`).
+- Registro: `POST /api/v1/auth/register` (nombre, email y contraseña) → `201` con `AuthResponse`:
+  perfil público (`user`) y sesión JWT (`accessToken`, `tokenType`, `expiresIn`).
 - Login: `POST /api/v1/auth/login` (email y contraseña) → `200` con el mismo `AuthResponse`; las
   credenciales incorrectas responden `401 UNAUTHORIZED` sin revelar si el email existe.
-- Perfil autenticado: `GET /api/v1/users/me` con `Authorization: Bearer <token>` → perfil público del
-  usuario del JWT.
+- Perfil autenticado: `GET /api/v1/auth/me` con `Authorization: Bearer <accessToken>` → perfil público
+  del usuario del JWT.
+- Logout: `POST /api/v1/auth/logout` → `204 No Content`; el cliente descarta el token (sin revocación
+  en el servidor).
 - Consulta de usuario por id: `GET /api/v1/users/{id}`.
+- Usuario de demo opcional: el seed crea `demo@example.com` en perfiles no productivos (ver
+  [Usuario de demo](#usuario-de-demo-seed)).
 - Health check: `GET /actuator/health`.
 
 ## Stack
@@ -124,6 +129,8 @@ Las variables de conexión a MongoDB (`MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DAT
 |---|---|---|
 | `JWT_SECRET` | Clave HMAC-SHA256 para firmar los JWT; mínimo 32 bytes | Sin valor: obligatoria |
 | `JWT_EXPIRATION_MS` | Vigencia del JWT en milisegundos | `86400000` (24 horas) |
+| `SEED_DEMO_EMAIL` | Email del usuario de demo que crea el seed | `demo@example.com` |
+| `SEED_DEMO_PASSWORD` | Contraseña del usuario de demo (se guarda como hash BCrypt) | `DemoPass123!` |
 | `PORT` | Puerto HTTP del servicio | `8080` |
 | `SPRING_PROFILES_ACTIVE` | Perfil activo (`dev`, `docker`, `test`, `prod`) | Sin perfil |
 | `springdoc.swagger-ui.enabled` | Swagger UI | `false` en el perfil `prod` |
@@ -136,6 +143,33 @@ tests usan la fixture pública de `src/test/resources/application.yml`.
 Perfiles: `dev` y `docker` crean el índice único de email automáticamente; `prod` lo mantiene
 desactivado y el índice se crea con el script de operación descrito en `delivery/devops-local.md`.
 
+### Usuario de demo (seed)
+
+`DemoUserSeeder` crea un usuario de demo al arrancar, solo con los perfiles `dev`, `docker` o `test`
+(y nunca con `prod`, aunque se combinen perfiles). El seed es idempotente: si el email ya existe,
+no duplica el usuario ni modifica sus datos, por lo que puede correr en cada reinicio sin errores.
+
+| Credencial | Valor por defecto |
+|---|---|
+| Email | `demo@example.com` |
+| Contraseña | `DemoPass123!` |
+| Nombre | `Demo` |
+
+- Configurar otro usuario con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD` (el email se normaliza a
+  minúsculas y la contraseña se guarda como hash BCrypt).
+- Desactivar el seed: arrancar sin `dev`, `docker` ni `test` (perfil por defecto o `prod`). No hay una
+  variable de entorno para apagarlo con esos perfiles activos.
+- Las credenciales por defecto son públicas y exclusivas para entornos no productivos; no usar el
+  seed en producción.
+
+Con el seed activo se puede probar el login sin registrar un usuario:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo@example.com","password":"DemoPass123!"}'
+```
+
 ## API
 
 - Swagger UI: http://localhost:8080/swagger-ui.html
@@ -145,17 +179,18 @@ desactivado y el índice se crea con el script de operación descrito en `delive
 
 | Método | Ruta | Qué hace | Respuestas |
 |---|---|---|---|
-| POST | `/api/v1/users` | Registra un usuario y devuelve `AuthResponse`: perfil público + JWT | 201, 400, 409, 500 |
+| POST | `/api/v1/auth/register` | Registra un usuario y devuelve `AuthResponse`: perfil público + sesión JWT | 201, 400, 409, 500 |
 | POST | `/api/v1/auth/login` | Verifica email y contraseña y devuelve `AuthResponse` | 200, 400, 401, 500 |
-| GET | `/api/v1/users/me` | Devuelve el perfil del JWT (`Authorization: Bearer`) | 200, 401, 404, 500 |
+| GET | `/api/v1/auth/me` | Devuelve el perfil del JWT (`Authorization: Bearer`) | 200, 401, 404, 500 |
+| POST | `/api/v1/auth/logout` | Cierra la sesión en el cliente; siempre `204`, sin revocación en el servidor | 204 |
 | GET | `/api/v1/users/{id}` | Consulta un usuario por id | 200, 404, 500 |
 | GET | `/actuator/health` | Estado del servicio | 200 |
 
 Los endpoints viven bajo `/api/v1`; el versionado de API está deshabilitado en `project.yaml`.
 
-### Token JWT
+### Sesión JWT
 
-El alta responde `201 Created` con un `AuthResponse`:
+El registro y el login responden con el mismo `AuthResponse`:
 
 ```json
 {
@@ -165,23 +200,39 @@ El alta responde `201 Created` con un `AuthResponse`:
     "email": "ana.perez@example.com",
     "createdAt": "2026-10-22T10:00:00Z"
   },
-  "token": "eyJhbGciOiJIUzI1NiJ9..."
+  "accessToken": "eyJhbGciOiJIUzI1NiJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
 }
 ```
 
-- Algoritmo de firma: HMAC-SHA256 (HS256), con la clave de `JWT_SECRET`.
-- Claims: `sub` = id del usuario, `email` = email normalizado, `iat` y `exp` (vigencia de
-  `JWT_EXPIRATION_MS`).
-- Uso previsto: cabecera `Authorization: Bearer <token>` en `GET /api/v1/users/me` y en los servicios
-  que consuman el JWT. No hay un endpoint dedicado a validar tokens: la validación ocurre al invocar
-  `GET /api/v1/users/me`.
-- `user` nunca incluye la contraseña ni `passwordHash`; el `token` del ejemplo es un marcador, no un
-  token real.
+- `accessToken`: JWT firmado con HMAC-SHA256 (HS256) y la clave de `JWT_SECRET`. Claims: `sub` = id
+  del usuario, `email` = email normalizado, `iat` y `exp` (vigencia de `JWT_EXPIRATION_MS`).
+- `tokenType`: siempre `Bearer`.
+- `expiresIn`: vigencia del token en segundos, calculada desde `JWT_EXPIRATION_MS` (3600 en el
+  ejemplo; con el valor por defecto de 24 horas son 86400).
+- Uso previsto: cabecera `Authorization: Bearer <accessToken>` en `GET /api/v1/auth/me` y en los
+  servicios que consuman el JWT. No hay un endpoint dedicado a validar tokens: la validación ocurre
+  al invocar `GET /api/v1/auth/me`.
+- `user` nunca incluye la contraseña ni `passwordHash`; el `accessToken` del ejemplo es un marcador,
+  no un token real.
 
-### Login y perfil autenticado
+### Registro, login y perfil autenticado
 
-`POST /api/v1/auth/login` verifica el email (normalizado igual que en el alta) y la contraseña contra
-el hash BCrypt. Responde `200 OK` con el mismo `AuthResponse` del alta:
+`POST /api/v1/auth/register` crea el usuario y responde `201 Created` con el `AuthResponse`:
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Ana Pérez",
+    "email": "ana.perez@example.com",
+    "password": "password123"
+  }'
+```
+
+`POST /api/v1/auth/login` verifica el email (normalizado igual que en el registro) y la contraseña
+contra el hash BCrypt. Responde `200 OK` con el mismo `AuthResponse`:
 
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/auth/login \
@@ -192,22 +243,10 @@ curl -i -X POST http://localhost:8080/api/v1/auth/login \
   }'
 ```
 
-```json
-{
-  "user": {
-    "id": "6710f3a2c9e77c0012345678",
-    "name": "Ana Pérez",
-    "email": "ana.perez@example.com",
-    "createdAt": "2026-10-22T10:00:00Z"
-  },
-  "token": "eyJhbGciOiJIUzI1NiJ9..."
-}
-```
-
-Con ese token, `GET /api/v1/users/me` devuelve el perfil persistido del usuario del claim `sub`:
+Con ese `accessToken`, `GET /api/v1/auth/me` devuelve el perfil persistido del usuario del claim `sub`:
 
 ```bash
-curl -i http://localhost:8080/api/v1/users/me \
+curl -i http://localhost:8080/api/v1/auth/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
 ```
 
@@ -220,12 +259,20 @@ curl -i http://localhost:8080/api/v1/users/me \
 }
 ```
 
+`POST /api/v1/auth/logout` responde siempre `204 No Content`, con o sin `Authorization`. No revoca el
+token en el servidor: el cliente debe descartar su `accessToken`.
+
+```bash
+curl -i -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9..."
+```
+
 - Credenciales incorrectas (email inexistente o contraseña que no coincide) → `401 UNAUTHORIZED` con
   el mismo mensaje genérico, sin revelar si el email existe.
-- `Authorization` ausente, sin el prefijo `Bearer`, con firma inválida o con el token vencido →
-  `401 UNAUTHORIZED`.
+- `Authorization` ausente, sin el prefijo `Bearer`, con firma inválida o con el token vencido en
+  `GET /api/v1/auth/me` → `401 UNAUTHORIZED`.
 - Token válido pero usuario ya eliminado → `404 NOT_FOUND`.
-- Reemplazar el token de los ejemplos por el `token` real que devuelve el login o el alta.
+- Reemplazar el `accessToken` de los ejemplos por el real que devuelve el login o el registro.
 
 ### Errores
 
@@ -265,8 +312,9 @@ es una lista (vacía si no aplica) y nunca se expone stacktrace ni detalle inter
 
 Los ejemplos de Swagger, `delivery/api.md`, Postman y Bruno usan el mismo usuario de prueba:
 `Ana Pérez`, `ana.perez@example.com`, contraseña `password123`, id
-`6710f3a2c9e77c0012345678`. Las colecciones crean un email único por corrida para el alta y reutilizan
-el JWT emitido en el login y en `GET /api/v1/users/me`.
+`6710f3a2c9e77c0012345678`. Las colecciones crean un email único por corrida en el registro y
+reutilizan el `accessToken` emitido en el login y en `GET /api/v1/auth/me`. Para probar sin registrar
+un usuario, usar el [usuario de demo](#usuario-de-demo-seed) en los entornos donde el seed está activo.
 
 ## Tests
 
@@ -307,7 +355,7 @@ services/auth-service/
 ├── docker-compose.yml
 └── src/main/java/com/meridian/users/
     ├── UsersApplication.java
-    ├── config/       # OpenApiConfig, JwtConfig, SecurityConfig y UserIndexConfig
+    ├── config/       # OpenApiConfig, JwtConfig, SecurityConfig, UserIndexConfig y DemoUserSeeder
     ├── exception/    # contrato de error global
     └── user/
         ├── controller/   # AuthController y UserController
