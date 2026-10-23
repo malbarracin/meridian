@@ -1,0 +1,4 @@
+replicaCount: 2
+config:
+  useMock: false
+# Configurar image.repository y un tag inmutable publicado antes de desplegar.
