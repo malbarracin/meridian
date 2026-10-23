@@ -263,9 +263,9 @@ Para comprobar los endpoints de la imagen final, después del arranque con Compo
 
 ```powershell
 $body = @{ name = 'Smoke'; email = ('smoke-' + [guid]::NewGuid().ToString('N') + '@example.com'); password = 'SmokeTest123!' } | ConvertTo-Json
-Invoke-RestMethod http://localhost:8080/api/v1/users -Method Post -ContentType 'application/json' -Body $body
+Invoke-RestMethod http://localhost:8080/api/v1/auth/register -Method Post -ContentType 'application/json' -Body $body
 $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body
-Invoke-RestMethod http://localhost:8080/api/v1/users/me -Headers @{ Authorization = ('Bearer ' + $login.token) }
+Invoke-RestMethod http://localhost:8080/api/v1/auth/me -Headers @{ Authorization = ('Bearer ' + $login.accessToken) }
 ```
 
 El registro debe devolver 201, login 200 con token y `/me` 200 con el usuario registrado.
@@ -310,6 +310,70 @@ aprovisionar el Secret con permisos de creación de índices antes del despliegu
 El servicio garantiza el índice durante el arranque. No se realizó deploy real.
 
 ## Verificación realizada
+
+### Cierre TASK-54 (2026-10-23)
+
+TASK-53 incorpora `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD`. Compose acepta ambos
+desde el `.env` privado; si están vacíos usa los defaults públicos del seed
+(`demo@example.com` / `DemoPass123!`). Son credenciales de demostración, solo para
+dev/docker/test. El perfil prod siempre desactiva el seed, incluso combinado con
+otros perfiles. Reiniciar no modifica la contraseña ni los datos de un usuario existente.
+Para cambiar credenciales existentes se requiere el flujo de gestión del usuario;
+cambiar estas variables no las rota.
+
+Helm permite `seedDemo.email` en ConfigMap y `seedDemo.existingSecret` como referencia
+a un Secret externo con clave `SEED_DEMO_PASSWORD`. No guardar contraseñas en values.
+Con values-dev se activa docker y el seed; values-prod mantiene prod y lo desactiva.
+El Secret opcional se aprovisiona por el gestor de secretos antes de instalar el chart.
+
+El smoke de registro/login/me de arriba usa ahora `/api/v1/auth/register`,
+`/api/v1/auth/me` y `accessToken`, según TASK-52. Healthchecks y probes conservan
+`/actuator/health`; los perfiles conservan MongoDB y no requieren cambios.
+Dockerfile mantiene JDK/JRE 21 alpine, wrapper, usuario app y flags de contenedor.
+
+El workflow de Auth es `.github/workflows/auth-service.yml`; `ci.yml` pertenece
+a Dashboard. Auth ejecuta ahora `./mvnw -q -B clean verify` y Helm lint/template
+para dev, prod y la referencia opcional al Secret del seed. No define credenciales
+JWT ni del seed globalmente para los tests.
+
+#### Pendiente de verificar — TASK-54
+
+Verificación local: `docker compose --env-file .env.example config --quiet` pasó
+con valores ficticios efímeros de MONGO_USER/MONGO_PASSWORD/JWT_SECRET en el proceso.
+`.\mvnw.cmd -q dependency:tree -Dverbose` terminó con código 0.
+SnakeYAML 2.4 validó workflows Auth/Dashboard, Compose, Chart/values y los cinco
+perfiles/configuración base de Auth, rechazando claves duplicadas. Las plantillas
+Go siguen pendientes de Helm. `git diff --check` pasó; `.env` permanece ignorado
+y los cambios no incorporan secretos reales.
+`.\mvnw.cmd -q -B clean verify` ejecutó 133 tests: 121 correctos, 0 fallos de aserción,
+12 errores de integración por acceso denegado a Docker, 0 omitidos. El gate JaCoCo
+no pudo completarse; no se modificaron tests ni el umbral de cobertura.
+
+Docker está instalado pero `docker info` falla por permiso denegado a la named pipe
+`dockerDesktopLinuxEngine`. No se puede verificar build ni arranque de la imagen.
+Con Docker accesible y `.env` privado completo, desde `services/auth-service`:
+
+```powershell
+docker compose build
+docker compose up --build -d --wait
+docker compose ps
+Invoke-RestMethod http://localhost:8080/actuator/health
+# Ejecutar también el smoke Auth de arriba; ambos servicios deben estar healthy.
+docker compose down
+```
+
+Helm no está instalado; no se descargó ni instaló. Desde raíz, quedan pendientes:
+
+```powershell
+helm lint helm/auth-service
+helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml
+helm template auth helm/auth-service -f helm/auth-service/values-prod.yaml
+helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml --set seedDemo.existingSecret=auth-demo
+```
+
+La ejecución remota de CI también queda pendiente. Para reproducir su build-test
+desde raíz en Windows con Docker accesible, ejecutar `.\mvnw.cmd -q -B clean verify`
+sin variables JWT globales y confirmar el gate JaCoCo de 80%.
 
 ### Cierre H2.4 / TASK-38 (2026-10-22)
 

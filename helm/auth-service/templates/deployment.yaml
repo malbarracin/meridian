@@ -40,6 +40,13 @@ spec:
             - configMapRef:
                 name: {{ include "auth-service.fullname" . }}
           env:
+            {{- if .Values.seedDemo.existingSecret }}
+            - name: SEED_DEMO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.seedDemo.existingSecret | quote }}
+                  key: SEED_DEMO_PASSWORD
+            {{- end }}
             - name: MONGO_URI
               valueFrom:
                 secretKeyRef:

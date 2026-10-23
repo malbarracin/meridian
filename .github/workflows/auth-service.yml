@@ -34,7 +34,7 @@ jobs:
           docker version
           docker info
       - name: Verify with MongoDB Testcontainers
-        run: ./mvnw -q -B verify
+        run: ./mvnw -q -B clean verify
       - name: Upload test and coverage reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -52,3 +52,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build container
         run: docker build -t "ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" services/auth-service
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm lint helm/auth-service
+      - run: helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml
+      - run: helm template auth helm/auth-service -f helm/auth-service/values-prod.yaml
+      - name: Render optional demo password Secret reference
+        run: helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml --set seedDemo.existingSecret=auth-demo

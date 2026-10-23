@@ -12,6 +12,9 @@ services:
       MONGO_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (at least 32 ASCII bytes)}
       JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      SEED_DEMO_EMAIL: ${SEED_DEMO_EMAIL:-demo@example.com}
+      # Public demo default matches the seeder; override in the ignored .env.
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-DemoPass123!}
       PORT: "8080"
     depends_on:
       mongodb:

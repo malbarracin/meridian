@@ -7,6 +7,11 @@ imagePullSecrets: []
 service:
   port: 8080
 springProfile: prod
+seedDemo:
+  # Only used by non-production profiles; prod always disables the seeder.
+  email: demo@example.com
+  # Optional pre-created Secret with SEED_DEMO_PASSWORD. Empty uses the public demo default.
+  existingSecret: ""
 mongo:
   database: auth
   # Pre-created Secret containing MONGO_URI. MongoDB is external to this chart.

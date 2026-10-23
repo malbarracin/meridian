@@ -1,5 +1,8 @@
 replicaCount: 2
 springProfile: prod
+# Seed is disabled by the application in prod, including combined profiles.
+seedDemo:
+  existingSecret: ""
 image:
   pullPolicy: Always
 mongo:

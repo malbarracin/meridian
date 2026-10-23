@@ -9,3 +9,4 @@ data:
   MONGO_DATABASE: {{ .Values.mongo.database | quote }}
   PORT: "8080"
   JWT_EXPIRATION_MS: {{ .Values.jwt.expirationMs | quote }}
+  SEED_DEMO_EMAIL: {{ .Values.seedDemo.email | quote }}
