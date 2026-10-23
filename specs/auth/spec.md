@@ -1,8 +1,8 @@
 ---
 title: Auth — Especificación funcional (H2)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca781a1bdfbca062c033586
-updated: 2026-10-23T20:52:52.104Z
+updated: 2026-10-23T20:58:23.842Z
 ---
 
 # Auth — Especificación funcional (H2)
