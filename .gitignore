@@ -19,7 +19,12 @@
 .kiro/skills/
 .codex/agents/
 .agents/skills/
+.agents/opensoma/
 .mcp.json
+.gemini/settings.json
+.qwen/settings.json
+.factory/mcp.json
+.agents/mcp_config.json
 opencode.json
 AGENTS.md
 team.yaml
