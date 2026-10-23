@@ -1,5 +1,8 @@
 # auth-service — manual de QA
 
+> Este documento cubre auth-service y, al final, dashboard-service. Cada sección indica cómo arrancar su
+> servicio e importar sus colecciones.
+
 Guía para validar el servicio con las colecciones de Postman y Bruno. Todos los pedidos apuntan a
 los endpoints reales del código y usan los mismos ejemplos que Swagger y `delivery/api.md`.
 
@@ -151,3 +154,162 @@ genera un email nuevo en cada corrida.
 | `GET /me` devuelve `401` | Se ejecutó sin login/alta previa o el token venció | Correr la colección completa en orden o repetir el login |
 | `verify` falla con `Could not find a valid Docker environment` | Docker no está accesible para Maven | Arrancar Docker y revisar `delivery/testing.md` |
 | Swagger UI no abre en `prod` | Deshabilitado a propósito | Usar perfil local/dev o `delivery/openapi/` |
+
+---
+
+# dashboard-service — manual de QA
+
+Guía para validar el servicio con las colecciones de Postman y Bruno. Todos los pedidos apuntan a los
+endpoints reales del código y usan los mismos ejemplos que Swagger, `delivery/api.md` y el contrato
+OpenAPI versionado.
+
+## Antes de empezar
+
+1. Tener JDK 21. No hace falta Docker, base de datos ni claves de proveedores.
+2. Arrancar el servicio en modo mock, desde `services/dashboard-service`:
+
+   ```powershell
+   $env:PORT = '8081'
+   $env:DASHBOARD_USE_MOCK = 'true'
+   .\mvnw.cmd spring-boot:run
+   ```
+
+   El modo mock devuelve fixtures estáticas y no hace llamadas externas: es el modo recomendado para
+   correr la colección completa sin depender de internet ni de cuotas.
+
+3. Verificar que responde:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:8081/actuator/health
+   ```
+
+   Debe devolver `status = UP`. Si el arranque falla, revisar que el puerto esté libre y que `PORT` sea
+   el esperado. `PORT` puede venir definido en el entorno global: por eso el comando lo fija en `8081`.
+
+4. Las colecciones usan `BASE_URL = http://localhost:8081`. Si el servicio corre en otro puerto, cambiar
+   `BASE_URL` en el entorno de Postman o en `delivery/bruno/dashboard-service/environments/local.bru`.
+
+No hay datos que limpiar entre corridas: el servicio no persiste nada y la caché es en memoria.
+
+## Postman
+
+### Importar
+
+1. Abrir Postman → **Import**.
+2. Importar `delivery/postman/dashboard-service.postman_collection.json`.
+3. Importar `delivery/postman/dashboard-service.postman_environment.json`.
+4. Seleccionar el entorno **dashboard-service - local** en el selector superior derecho.
+
+El entorno trae:
+
+| Variable | Valor inicial | Para qué |
+|---|---|---|
+| `BASE_URL` | `http://localhost:8081` | URL base de todos los pedidos |
+| `FINNHUB_API_KEY` | vacía | Clave de Finnhub para el modo real; no versionar una clave real |
+| `NEWS_API_KEY` | vacía | Clave de NewsAPI para el modo real; no versionar una clave real |
+| `DASHBOARD_CACHE_TTL_SECONDS` | `60` | TTL usado por el servicio; no se envía en el pedido |
+| `DASHBOARD_USE_MOCK` | `true` | Debe coincidir con el modo con el que se arrancó el servicio |
+
+`FINNHUB_API_KEY`, `NEWS_API_KEY` y `DASHBOARD_CACHE_TTL_SECONDS` son configuración del backend: se
+cargan al arrancar el servicio, no viajan en las requests. Cambiarlas en Postman no cambia el
+comportamiento del servicio; solo documentan el entorno.
+
+### Orden y resultado esperado
+
+| # | Carpeta / pedido | Método y ruta | Resultado esperado |
+|---|---|---|---|
+| 1 | 1. Salud → Health check | `GET /actuator/health` | `200`, `status = UP` |
+| 2 | 2. Dashboard → Dashboard en modo mock | `GET /api/v1/dashboard` | `200`, ocho secciones, `degraded` vacío, 16 puntos de histórico, `dolar[0].tipo = oficial` |
+| 3 | 2. Dashboard → Dashboard con proveedores reales | `GET /api/v1/dashboard` | `200`, ocho secciones; valores variables y `degraded` puede no estar vacío |
+| 4 | 3. Documentación → OpenAPI del dashboard | `GET /v3/api-docs/dashboard` | `200`, `info.title = Dashboard Service API`, publica `/api/v1/dashboard` |
+| 5 | 3. Documentación → Swagger UI | `GET /swagger-ui.html` | `200` (redirección a la interfaz) |
+
+Los pedidos 2 y 3 usan la misma ruta. El modo lo define el arranque del servicio, no la request:
+
+- Con el servicio en mock, correr el pedido 2. El test de mock solo se ejecuta si
+  `DASHBOARD_USE_MOCK = true` en el entorno; si no, valida únicamente estructura.
+- Para el pedido 3, detener el servicio y volver a arrancarlo con `DASHBOARD_USE_MOCK = 'false'` y,
+  opcionalmente, `FINNHUB_API_KEY` y `NEWS_API_KEY`. Cambiar también `DASHBOARD_USE_MOCK` a `false` en
+  el entorno de Postman.
+
+Con proveedores reales, valores esperados:
+
+- `dolar`: oficial y blue con valores de mercado.
+- `fx`: USD→EUR y USD→BRL.
+- `crypto`: BTC y ETH con precio y variación 24 h.
+- `cryptoHistory`: serie de 7 días de BTC y de ETH.
+- `equities`: AAPL, MSFT y SPY. Sin `FINNHUB_API_KEY`, fixtures (175.00, 415.00 y 450.00 USD).
+- `equityCandles`: una o más velas por ticker. Sin key, una vela sintética por ticker.
+- `news`: hasta 8 artículos. Sin `NEWS_API_KEY`, noticias de HN Algolia.
+- `degraded`: vacío si todos los proveedores responden; si no, los nombres de sección afectados.
+
+El pedido 2 **no** debe correrse contra el servicio en modo real esperando los valores mock: el test
+condicional se saltea, pero el ejemplo guardado no coincidirá con la respuesta.
+
+### Collection Runner
+
+1. En Postman, elegir la colección **dashboard-service** → **Run**.
+2. Seleccionar el entorno **dashboard-service - local**.
+3. Ejecutar en orden (Run dashboard-service). Todos los tests deben quedar en verde.
+
+La respuesta `500 INTERNAL_ERROR` existe en el contrato y está documentada en Swagger y `api.md`, pero
+no se puede provocar desde un cliente sano: no hay un pedido de la colección para forzarla.
+
+### Línea de comandos (opcional)
+
+Si está instalado `newman`:
+
+```powershell
+newman run delivery/postman/dashboard-service.postman_collection.json `
+  -e delivery/postman/dashboard-service.postman_environment.json
+```
+
+Para correr solo el modo mock, arrancar el servicio con `DASHBOARD_USE_MOCK=true` y dejar
+`DASHBOARD_USE_MOCK=true` en el entorno. El pedido de proveedores reales también pasará si el servicio
+está en mock (valida solo estructura), pero no prueba las integraciones.
+
+## Bruno
+
+### Abrir la colección nativa
+
+1. Bruno → **Open Collection**.
+2. Elegir la carpeta `delivery/bruno/dashboard-service/`.
+3. Seleccionar el entorno **local** (archivo `environments/local.bru`).
+4. Ejecutar la colección completa (**Run Collection**) o los pedidos en el orden del árbol:
+   `1-salud` → `2-dashboard` → `3-documentacion`.
+
+Los pedidos, nombres, orden y datos son los mismos que en Postman. Las aserciones de Bruno validan
+status y que las ocho secciones sean arrays; el caso mock y el real comparten la misma ruta. El entorno
+`local.bru` trae `BASE_URL`, `FINNHUB_API_KEY`, `NEWS_API_KEY`, `DASHBOARD_CACHE_TTL_SECONDS` y
+`DASHBOARD_USE_MOCK`.
+
+### Importar desde Postman u OpenAPI
+
+Bruno también puede importar `delivery/postman/dashboard-service.postman_collection.json`
+(**Import Collection → Postman Collection**) o
+`delivery/openapi/dashboard-service/openapi.json` (**Import Collection → OpenAPI**). La colección nativa
+es la recomendada porque incluye aserciones y variables ya configuradas.
+
+## Validación de los archivos
+
+Los JSON deben ser válidos. Con Node.js instalado:
+
+```powershell
+node -e "for (const f of process.argv.slice(1)) { JSON.parse(require('fs').readFileSync(f,'utf8')); console.log('OK ' + f); }" delivery/postman/dashboard-service.postman_collection.json delivery/postman/dashboard-service.postman_environment.json delivery/openapi/dashboard-service/openapi.json delivery/bruno/dashboard-service/bruno.json
+```
+
+## Problemas frecuentes
+
+| Síntoma | Causa probable | Qué revisar |
+|---|---|---|
+| El servicio no arranca por puerto ocupado | Otro proceso usa `8081`, o `PORT` está definido en el entorno | Liberar el puerto o fijar `PORT` a otro valor y ajustar `BASE_URL` |
+| `Connection refused` en Postman | El servicio no está escuchando en `BASE_URL` | Puerto, logs de arranque y variable `BASE_URL` |
+| `health` responde `DOWN` | El proceso no terminó de arrancar | Esperar el log `Started DashboardApplication` y repetir |
+| `degraded` trae todas las secciones | Sin internet, DNS o proveedores bloqueados | Es el comportamiento esperado: `200` con listas vacías; usar modo mock para QA funcional |
+| `degraded` trae `equities` o `equityCandles` | Finnhub rechazó la clave o no hay cuota | Revisar `FINNHUB_API_KEY`; sin clave se usan fixtures y no debería degradarse |
+| `degraded` trae `news` | NewsAPI y HN fallaron | Revisar `NEWS_API_KEY`, conectividad y cuota; sin clave va directo a HN |
+| Los valores mock no coinciden | El servicio no está en modo mock | `DASHBOARD_USE_MOCK=true` al arrancar y en el entorno de Postman |
+| El pedido de mock falla en `dolar[0].tipo` | El servicio corre en modo real y el entorno dice mock | Alinear el modo del servicio con `DASHBOARD_USE_MOCK` del entorno |
+| Swagger UI devuelve 404 | springdoc deshabilitado en el perfil/entorno | Usar un entorno local sin `springdoc.swagger-ui.enabled=false` |
+| `curl` no acepta `-i` en PowerShell | `curl` es alias de `Invoke-WebRequest` | Usar `curl.exe` (ver `delivery/api.md`) |
+| El histórico tiene menos de 16 puntos en mock | Se cambió la fixture o el modo | Revisar `DashboardMockFixtures`; en mock son 8 puntos por moneda |

@@ -1,5 +1,106 @@
 # Operación local de auth-service
 
+## Dashboard-service — TASK-48
+
+Servicio independiente sin base de datos, Java 21 y puerto 8081, según
+`specs/dashboard/arquitectura-apis-publicas.md`. Requiere Docker Compose v2 para
+contenedores; Java 21 para Maven; Helm 3 y kubectl para Kubernetes.
+Los siguientes comandos PowerShell parten de la raíz del repositorio.
+
+```powershell
+Set-Location services/dashboard-service
+Copy-Item .env.example .env
+docker compose config --quiet
+docker compose up --build -d --wait
+docker compose ps
+Invoke-RestMethod http://localhost:8081/actuator/health
+Invoke-RestMethod http://localhost:8081/api/v1/dashboard
+docker compose logs --tail 100 dashboard-service
+docker compose down
+.\mvnw.cmd -q -B clean verify
+.\mvnw.cmd -q dependency:tree -Dverbose
+Set-Location ../..
+```
+
+La salud debe devolver `status: UP`. Para una demo offline, poner
+`DASHBOARD_USE_MOCK=true` en `.env` antes de levantar Compose; el dashboard debe
+devolver fixtures y `degraded` vacío. Sin modo mock se consultan proveedores externos.
+Variables opcionales de `.env.example`:
+
+| Variable | Default | Uso |
+| --- | --- | --- |
+| FINNHUB_API_KEY | vacío | Sin clave, fixtures de bolsa |
+| NEWS_API_KEY | vacío | Sin clave, fallback HN Algolia |
+| DASHBOARD_CACHE_TTL_SECONDS | 60 | TTL en segundos; CoinGecko aplica mínimo 60 |
+| DASHBOARD_USE_MOCK | false | Demo sin tráfico externo |
+| PORT | 8081 | Puerto publicado del host en Compose |
+
+Compose activa `docker` y fija el puerto interno en 8081. Si se cambia `PORT`,
+ajustar la URL de los comandos HTTP. El Dockerfile adapta la plantilla del pack:
+JDK 21 alpine, wrapper, extracción por capas con `jarmode=tools` de Spring Boot 3.5,
+JRE 21 alpine, UID/GID 10001, healthcheck y flags JVM para contenedores.
+CI ejecuta los tests antes de construir la imagen; el build Docker omite tests.
+Los perfiles dev/docker/prod heredan la configuración base sin agregar persistencia;
+el perfil test activa mocks. No se necesitan credenciales para arrancar.
+
+### CI y publicación de dashboard
+
+`.github/workflows/ci.yml` ejecuta `build-test-dashboard` en push/PR que afecte al
+módulo, chart o workflow: Temurin 21, caché Maven y `./mvnw -B clean verify`, con el
+gate JaCoCo 80% existente. Publica reportes Surefire/JaCoCo incluso ante fallos.
+También ejecuta Helm lint/template. En push a main construye
+`ghcr.io/<org>/<repo>/dashboard-service:<sha>` después de pasar Maven.
+No publica la imagen: el registry no está configurado. Para habilitar publicación,
+configurar autenticación y `packages: write` con GITHUB_TOKEN o un token de registry
+en GitHub Secrets. `dashboard-service-cd.yml` es una plantilla manual informativa.
+El despliegue requiere registry, cluster, credenciales y environment protegido acordados.
+
+### Helm de dashboard
+
+```powershell
+helm lint helm/dashboard-service
+helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-dev.yaml
+helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-prod.yaml
+docker build -t dashboard-service:local services/dashboard-service
+kind load docker-image dashboard-service:local
+helm upgrade --install dashboard helm/dashboard-service -f helm/dashboard-service/values-dev.yaml -n dev --create-namespace
+kubectl rollout status deployment/dashboard-dashboard-service -n dev
+kubectl port-forward service/dashboard-dashboard-service 8081:8081 -n dev
+```
+
+El ejemplo usa kind y una imagen local; para otro cluster, publicar la imagen y
+configurar `image.repository`, `image.tag` e `imagePullSecrets`. Prod usa dos réplicas;
+cada réplica tiene su propia caché en memoria. Dev activa mocks. Todos los despliegues
+usan perfil Spring prod, probes startup/readiness/liveness en `/actuator/health`,
+ClusterIP, usuario no-root y recursos configurables (100m/256Mi solicitados,
+1 CPU/512Mi de límite). No se realizó despliegue real.
+
+Por defecto el chart crea un Secret con claves vacías. Se recomienda aprovisionar
+un Secret externo con `FINNHUB_API_KEY` y `NEWS_API_KEY` y referenciarlo mediante
+`secrets.existingSecret`. Las claves son opcionales y conservan el fallback sin Secret.
+La alternativa `secrets.finnhubApiKey`/`secrets.newsApiKey` solo debe proporcionarse
+en un archivo privado ignorado, por ejemplo `services/dashboard-service/.env.helm.yaml`,
+mediante `-f`; no usar claves reales en values versionados. Tras rotar un Secret
+externo, reiniciar el Deployment con `kubectl rollout restart`.
+
+### Verificación dashboard y pendientes
+
+- Compose `docker compose --env-file .env.example config --quiet`: OK.
+- Sintaxis YAML de workflows, Compose, perfiles, Chart y values: OK con SnakeYAML
+  2.4 local, con rechazo de claves duplicadas. No sustituye el renderizado Helm.
+- `.\mvnw.cmd -q dependency:tree -Dverbose` desde el módulo: código 0.
+- `.\mvnw.cmd -q -B clean verify` desde el módulo: código 0, 74 tests y gate
+  JaCoCo 80% aprobado. Extracción del JAR por capas con `jarmode=tools`: OK.
+- Pendiente de verificar: Docker devuelve permiso denegado al daemon
+  `dockerDesktopLinuxEngine`. Desde `services/dashboard-service`, ejecutar
+  `docker compose build`, `docker compose up -d --wait`, `docker compose ps`,
+  `Invoke-RestMethod http://localhost:8081/actuator/health` y `docker compose down`.
+- Pendiente de verificar: Helm no está instalado. Ejecutar `helm lint helm/dashboard-service`
+  y los dos comandos `helm template` anteriores. No se instaló ni descargó Helm.
+- Pendiente de verificar: ejecución remota de GitHub Actions y despliegue en cluster.
+
+## Auth-service — operación existente
+
 Requisitos: Java 21, Docker con Compose v2 o posterior; Helm 3 y kubectl para Kubernetes.
 Persistencia: MongoDB 7. Identidad y puerto tomados del POM y de specs/auth/arquitectura.md.
 Todos los comandos PowerShell parten de la raíz del repositorio, salvo donde se indica.

@@ -1,0 +1,54 @@
+name: Dashboard service CI
+on:
+  push:
+    paths:
+      - 'services/dashboard-service/**'
+      - 'helm/dashboard-service/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    paths:
+      - 'services/dashboard-service/**'
+      - 'helm/dashboard-service/**'
+      - '.github/workflows/ci.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-test-dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/dashboard-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: services/dashboard-service/pom.xml
+      - run: chmod +x mvnw
+      - run: ./mvnw -B clean verify
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-service-test-reports
+          path: |
+            services/dashboard-service/target/surefire-reports/
+            services/dashboard-service/target/site/jacoco/
+  docker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-test-dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        shell: bash
+        run: docker build -t "ghcr.io/${GITHUB_REPOSITORY,,}/dashboard-service:${GITHUB_SHA}" services/dashboard-service
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm lint helm/dashboard-service
+      - run: helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-dev.yaml
+      - run: helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-prod.yaml

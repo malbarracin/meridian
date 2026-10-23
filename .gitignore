@@ -2,6 +2,9 @@
 .env.*
 !.env.example
 
+# Cachés locales de Maven generadas durante los builds.
+.m2-local/
+
 # >>> opensoma: agentes y configuración de soma (no van al repositorio) >>>
 .opensoma/
 .opencode/

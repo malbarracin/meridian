@@ -1,5 +1,8 @@
 # auth-service — uso de la API con curl
 
+> Este documento cubre auth-service y, al final, dashboard-service (puerto 8081). Cada sección es
+> independiente y usa la misma convención de ejemplos que Swagger y las colecciones.
+
 Base URL local: `http://localhost:8080`. Todos los endpoints están bajo `/api/v1` (el versionado
 de API está deshabilitado en `project.yaml`, por lo que existe una sola versión).
 
@@ -320,3 +323,229 @@ Respuesta `200 OK`:
 - Contrato de errores: `src/main/java/com/meridian/users/exception/GlobalExceptionHandler.java`.
 - Emisión y validación de JWT: `src/main/java/com/meridian/users/user/service/JwtService.java`.
 - Configuración JWT: `src/main/java/com/meridian/users/config/JwtConfig.java` y `application.yml`.
+
+---
+
+# dashboard-service — uso de la API con curl
+
+Base URL local: `http://localhost:8081` (`PORT` configurable). La API expone una sola versión bajo
+`/api/v1`; el versionado está deshabilitado en `project.yaml`.
+
+El servicio se arranca desde `services/dashboard-service`:
+
+```powershell
+$env:DASHBOARD_USE_MOCK = 'true'   # fixtures estáticas, sin proveedores externos
+.\mvnw.cmd spring-boot:run
+```
+
+Sin `DASHBOARD_USE_MOCK` (o con `false`) consulta los proveedores reales. Los ejemplos de esta sección
+son la respuesta real capturada en modo mock; con proveedores activos cambian los valores y `degraded`
+puede traer secciones, pero la forma del JSON es la misma.
+
+> En Windows, `curl` es un alias de `Invoke-WebRequest` en PowerShell 5.1. Usar `curl.exe` para los
+> comandos de abajo. En Linux/macOS usar `curl` normalmente.
+
+## Convenciones
+
+- Request y response: `Content-Type: application/json`.
+- Fechas: ISO-8601 en UTC (`2026-10-15T00:00:00Z`).
+- Los precios y tasas son números decimales; `priceUsd` y `change24h` pueden ser enteros o decimales.
+- `degraded` siempre es un array; nunca `null`. Las listas de sección pueden venir vacías si no hay datos
+  ni caché previa.
+- No se envían claves ni tokens al endpoint: las claves de proveedores se configuran en el entorno del
+  servicio.
+
+## GET /api/v1/dashboard — dashboard agregado
+
+```bash
+curl.exe -i http://localhost:8081/api/v1/dashboard
+```
+
+Respuesta `200 OK` (`DashboardResponse`, modo mock):
+
+```json
+{
+  "dolar": [
+    { "tipo": "oficial", "compra": 1000.00, "venta": 1040.00 },
+    { "tipo": "blue", "compra": 1200.00, "venta": 1220.00 }
+  ],
+  "fx": [
+    { "from": "USD", "to": "EUR", "rate": 0.92 },
+    { "from": "USD", "to": "BRL", "rate": 5.10 }
+  ],
+  "crypto": [
+    { "id": "bitcoin", "symbol": "BTC", "priceUsd": 67000, "change24h": 2.5 },
+    { "id": "ethereum", "symbol": "ETH", "priceUsd": 3500, "change24h": -1.2 }
+  ],
+  "cryptoHistory": [
+    { "timestamp": "2026-10-15T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-16T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-17T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-18T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-19T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-20T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-21T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-22T00:00:00Z", "priceUsd": 67000 },
+    { "timestamp": "2026-10-15T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-16T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-17T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-18T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-19T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-20T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-21T00:00:00Z", "priceUsd": 3500 },
+    { "timestamp": "2026-10-22T00:00:00Z", "priceUsd": 3500 }
+  ],
+  "equities": [
+    { "ticker": "AAPL", "price": 175.00, "currency": "USD" },
+    { "ticker": "MSFT", "price": 415.00, "currency": "USD" },
+    { "ticker": "SPY", "price": 450.00, "currency": "USD" }
+  ],
+  "equityCandles": [
+    {
+      "ticker": "AAPL",
+      "ohlcPoints": [
+        { "t": 1792627200, "o": 175.00, "h": 175.00, "l": 175.00, "c": 175.00, "v": 0 }
+      ]
+    },
+    {
+      "ticker": "MSFT",
+      "ohlcPoints": [
+        { "t": 1792627200, "o": 415.00, "h": 415.00, "l": 415.00, "c": 415.00, "v": 0 }
+      ]
+    },
+    {
+      "ticker": "SPY",
+      "ohlcPoints": [
+        { "t": 1792627200, "o": 450.00, "h": 450.00, "l": 450.00, "c": 450.00, "v": 0 }
+      ]
+    }
+  ],
+  "news": [
+    {
+      "id": "demo-ai",
+      "title": "AI research demo",
+      "summary": "Static AI news fixture",
+      "source": "Meridian Demo",
+      "publishedAt": "2026-01-01T12:00:00Z",
+      "url": "https://example.com/demo-ai",
+      "topic": "ai-tech"
+    },
+    {
+      "id": "demo-tech",
+      "title": "Technology demo",
+      "summary": "Static technology news fixture",
+      "source": "Meridian Demo",
+      "publishedAt": "2026-01-02T12:00:00Z",
+      "url": "https://example.com/demo-tech",
+      "topic": "ai-tech"
+    }
+  ],
+  "degraded": []
+}
+```
+
+Campos:
+
+| Sección | Contenido |
+|---|---|
+| `dolar` | Cotizaciones oficial y blue con `tipo`, `compra` y `venta` en ARS |
+| `fx` | Tasas `from` → `to` con `rate` (USD→EUR y USD→BRL) |
+| `crypto` | Precio en USD y variación 24 h de BTC y ETH |
+| `cryptoHistory` | Serie de 7 días por moneda (`timestamp`, `priceUsd`); BTC primero, ETH después |
+| `equities` | Quote de AAPL, MSFT y SPY con `price` y `currency` |
+| `equityCandles` | Velas diarias por ticker (`t` Unix, `o`, `h`, `l`, `c`, `v`) |
+| `news` | Hasta 8 noticias de IA/tecnología con `id`, `title`, `summary`, `source`, `publishedAt`, `url`, `topic` |
+| `degraded` | Nombres de sección sin datos frescos (`dolar`, `fx`, `crypto`, `cryptoHistory`, `equities`, `equityCandles`, `news`) |
+
+Comportamiento con proveedores reales:
+
+- Cada sección se consulta en paralelo y se aísla: un proveedor caído no cambia el `200`.
+- Si una sección falla y hay una respuesta anterior en caché, se devuelve esa copia y la sección se
+  informa en `degraded`.
+- Si falla sin caché, la lista de esa sección viene vacía y también se informa en `degraded`.
+- `cryptoHistory` aparece una sola vez en `degraded` aunque fallen BTC y ETH.
+- La caché dura `DASHBOARD_CACHE_TTL_SECONDS` (60 s por defecto); CoinGecko usa un mínimo de 60 s.
+- Sin `FINNHUB_API_KEY`, `equities` y `equityCandles` usan fixtures estáticas. Sin `NEWS_API_KEY`,
+  `news` se consulta a HN Algolia.
+
+### Probar con proveedores reales
+
+Detener el servicio y arrancarlo sin modo mock (las claves son opcionales; no versionar valores reales):
+
+```powershell
+$env:DASHBOARD_USE_MOCK = 'false'
+$env:FINNHUB_API_KEY = '<clave-opcional>'
+$env:NEWS_API_KEY = '<clave-opcional>'
+.\mvnw.cmd spring-boot:run
+```
+
+El pedido es el mismo:
+
+```bash
+curl.exe -i http://localhost:8081/api/v1/dashboard
+```
+
+La forma del JSON no cambia; sí los valores y, si algún proveedor falla, el contenido de `degraded`. Sin
+conectividad, es esperable un `200` con secciones vacías y `degraded` completo. Para QA reproducible usar
+el modo mock.
+
+### Errores posibles
+
+`500 INTERNAL_ERROR` — fallo inesperado de la orquestación (no se provoca desde un cliente sano):
+
+```json
+{
+  "code": "INTERNAL_ERROR",
+  "message": "Error interno",
+  "details": [],
+  "timestamp": "2026-10-22T10:05:00Z"
+}
+```
+
+El contrato completo (`code`, `message`, `details`, `timestamp`) está en
+`delivery/architecture-overview.md`, sección dashboard-service. El endpoint no recibe body ni parámetros,
+por lo que no devuelve `400`, `404` ni `409` en el uso normal.
+
+## GET /actuator/health — estado del servicio
+
+```bash
+curl.exe -i http://localhost:8081/actuator/health
+```
+
+Respuesta `200 OK`:
+
+```json
+{
+  "status": "UP",
+  "groups": ["liveness", "readiness"]
+}
+```
+
+No depende de proveedores externos: un proveedor caído no marca el health como `DOWN`.
+
+## GET /actuator/info — metadatos
+
+```bash
+curl.exe -i http://localhost:8081/actuator/info
+```
+
+Responde `200 OK`. El contenido depende de las propiedades `info.*` y del build; el servicio no publica
+datos sensibles.
+
+## Documentación interactiva
+
+| Recurso | URL |
+|---|---|
+| Swagger UI | http://localhost:8081/swagger-ui.html |
+| OpenAPI completo (JSON) | http://localhost:8081/v3/api-docs |
+| Grupo dashboard | http://localhost:8081/v3/api-docs/dashboard |
+| Copia versionada | `delivery/openapi/dashboard-service/openapi.json` y `.yaml` |
+
+## Referencias
+
+- Especificación funcional: `specs/dashboard/apis-publicas.md`.
+- Arquitectura: `specs/dashboard/arquitectura-apis-publicas.md` y `delivery/architecture-overview.md`.
+- Colecciones: `delivery/postman/dashboard-service.postman_collection.json` y
+  `delivery/bruno/dashboard-service/`.
+- QA paso a paso: `delivery/qa-manual.md`.
+- Contrato de error: `services/dashboard-service/src/main/java/com/meridian/dashboard/exception/GlobalExceptionHandler.java`.

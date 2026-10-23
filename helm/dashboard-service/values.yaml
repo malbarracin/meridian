@@ -1,0 +1,24 @@
+replicaCount: 1
+image:
+  repository: dashboard-service
+  tag: local
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+service:
+  port: 8081
+config:
+  cacheTtlSeconds: 60
+  useMock: false
+secrets:
+  # Secret externo con FINNHUB_API_KEY y NEWS_API_KEY (ambas opcionales).
+  existingSecret: ""
+  # Solo para un archivo privado ignorado por Git; nunca guardar claves reales aquí.
+  finnhubApiKey: ""
+  newsApiKey: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
