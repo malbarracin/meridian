@@ -1,0 +1,85 @@
+package com.meridian.users.exception;
+
+import java.time.Instant;
+import java.util.List;
+
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
+/** Traduce excepciones al contrato público sin exponer detalles internos. */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    /** Devuelve los campos rechazados por la validación del cuerpo. */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
+        List<FieldError> details = exception.getBindingResult().getFieldErrors().stream()
+                .map(error -> new FieldError(error.getField(), error.getDefaultMessage()))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
+                "La solicitud tiene datos inválidos", details);
+    }
+
+    /** Devuelve las restricciones incumplidas en parámetros. */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolation(ConstraintViolationException exception) {
+        List<FieldError> details = exception.getConstraintViolations().stream()
+                .map(error -> new FieldError(error.getPropertyPath().toString(), error.getMessage()))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
+                "La solicitud tiene datos inválidos", details);
+    }
+
+    /** Rechaza solicitudes mal formadas sin revelar el contenido recibido. */
+    @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class,
+            MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class})
+    public ResponseEntity<ErrorResponse> handleBadRequest(Exception exception) {
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.BAD_REQUEST, "Solicitud inválida", List.of());
+    }
+
+    /** Rechaza credenciales inválidas con el contrato de error compartido. */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException exception) {
+        return build(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    /** Informa de la ausencia de un recurso. */
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException exception) {
+        return build(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, exception.getMessage(), List.of());
+    }
+
+    /** Informa de un conflicto de dominio. */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(ConflictException exception) {
+        return build(HttpStatus.CONFLICT, ErrorCode.CONFLICT, exception.getMessage(), List.of());
+    }
+
+    /** Oculta los detalles del índice y documento duplicado. */
+    @ExceptionHandler(DuplicateKeyException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException exception) {
+        return build(HttpStatus.CONFLICT, ErrorCode.CONFLICT, "El recurso ya existe", List.of());
+    }
+
+    /** Devuelve un mensaje genérico ante errores inesperados. */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception exception) {
+        log.error("Error inesperado de tipo {}", exception.getClass().getName());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR, "Error interno", List.of());
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, ErrorCode code, String message,
+            List<FieldError> details) {
+        return ResponseEntity.status(status).body(new ErrorResponse(code.name(), message, details, Instant.now()));
+    }
+}

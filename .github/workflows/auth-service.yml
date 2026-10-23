@@ -1,0 +1,63 @@
+name: Auth service CI
+on:
+  push:
+    paths:
+      - 'services/auth-service/**'
+      - '.github/workflows/auth-service.yml'
+      - 'helm/auth-service/**'
+  pull_request:
+    paths:
+      - 'services/auth-service/**'
+      - '.github/workflows/auth-service.yml'
+      - 'helm/auth-service/**'
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/auth-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: services/auth-service/pom.xml
+      - run: chmod +x mvnw
+      # Tests run on the host and use the runner's Docker socket directly.
+      # Fail here if Docker is unavailable; never skip the integration suite.
+      - name: Check Docker for Testcontainers
+        run: |
+          docker version
+          docker info
+      - name: Verify with MongoDB Testcontainers
+        run: ./mvnw -q -B clean verify
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-service-test-reports
+          path: |
+            services/auth-service/target/surefire-reports/
+            services/auth-service/target/site/jacoco/
+          if-no-files-found: warn
+  docker:
+    needs: build-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build container
+        run: docker build -t "ghcr.io/${GITHUB_REPOSITORY,,}:${GITHUB_SHA}" services/auth-service
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: helm lint helm/auth-service
+      - run: helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml
+      - run: helm template auth helm/auth-service -f helm/auth-service/values-prod.yaml
+      - name: Render optional demo password Secret reference
+        run: helm template auth helm/auth-service -f helm/auth-service/values-dev.yaml --set seedDemo.existingSecret=auth-demo

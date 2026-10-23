@@ -1,0 +1,20 @@
+meta {
+  name: Swagger UI
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{BASE_URL}}/swagger-ui.html
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Redirige a la interfaz Swagger UI. Responde 200 cuando springdoc está habilitado;
+  en producción se desactiva con springdoc.swagger-ui.enabled=false.
+}

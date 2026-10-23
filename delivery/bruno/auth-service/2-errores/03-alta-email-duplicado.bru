@@ -1,0 +1,34 @@
+meta {
+  name: Alta con email duplicado
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Otra Ana",
+    "email": "{{userEmail}}",
+    "password": "password123"
+  }
+}
+
+assert {
+  res.status: eq 409
+  res.body.code: eq CONFLICT
+}
+
+docs {
+  Repite el email registrado en "Registrar usuario". Responde 409 CONFLICT con details vacío.
+
+  Ejecutar después del alta del flujo feliz dentro de la misma corrida para reutilizar userEmail.
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Alta con email inválido
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Ana Pérez",
+    "email": "invalido",
+    "password": "password123"
+  }
+}
+
+assert {
+  res.status: eq 400
+  res.body.code: eq VALIDATION_ERROR
+  res.body.details: isArray
+}
+
+docs {
+  El email no cumple el formato esperado. Responde 400 VALIDATION_ERROR con el campo rechazado en details.
+}

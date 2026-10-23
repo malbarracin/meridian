@@ -1,0 +1,1035 @@
+{
+  "info": {
+    "name": "auth-service",
+    "description": "Registro, login, perfil autenticado y logout del auth-service. Orden sugerido: carpeta 1 (flujo feliz) → carpeta 2 (errores) → carpeta 3 (salud). El registro genera un email único por corrida y devuelve AuthResponse (user + accessToken/tokenType/expiresIn); guarda el id en {{userId}} y el JWT en {{authToken}}. El login reutiliza ese email, devuelve otro AuthResponse y actualiza {{authToken}}; GET /api/v1/auth/me lo usa como Bearer y el logout descarta el token en el cliente. Los tokens de los ejemplos son marcadores, no credenciales reales.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "userEmail",
+      "value": ""
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Flujo feliz",
+      "description": "Registro, sesión, perfil autenticado y logout. Ejecutar en orden: el registro guarda {{userId}}, {{userEmail}} y {{authToken}}.",
+      "item": [
+        {
+          "name": "Registrar usuario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ana Pérez\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Registra un usuario con nombre, email y contraseña. El email se normaliza (trim y minúsculas) y debe ser único; la contraseña se guarda solo como hash BCrypt. Responde 201 con AuthResponse: perfil público en user y sesión JWT en accessToken, tokenType y expiresIn. Respuestas: 201 usuario creado, 400 datos inválidos, 409 email ya registrado, 500 error interno. El email se genera con la marca de tiempo para poder repetir la corrida."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('userEmail', 'ana.' + Date.now() + '@example.com');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve AuthResponse con user, accessToken, tokenType y expiresIn', () => { pm.expect(body).to.have.all.keys('user', 'accessToken', 'tokenType', 'expiresIn'); });",
+                  "pm.test('devuelve el id del usuario', () => pm.expect(body.user.id).to.be.a('string'));",
+                  "pm.test('devuelve el email registrado', () => pm.expect(body.user.email).to.eql(pm.collectionVariables.get('userEmail')));",
+                  "pm.test('incluye createdAt', () => pm.expect(body.user.createdAt).to.be.a('string'));",
+                  "pm.test('devuelve un accessToken JWT con tres segmentos', () => { pm.expect(body.accessToken).to.be.a('string').and.not.empty; pm.expect(body.accessToken.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('tokenType es Bearer y expiresIn es numérico', () => { pm.expect(body.tokenType).to.eql('Bearer'); pm.expect(body.expiresIn).to.be.a('number'); });",
+                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; pm.expect(body.user.password).to.be.undefined; pm.expect(body.user.passwordHash).to.be.undefined; });",
+                  "pm.collectionVariables.set('userId', body.user.id);",
+                  "pm.collectionVariables.set('authToken', body.accessToken);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 - usuario creado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Ana Pérez\",\n  \"email\": \"ana.perez@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresIn\": 3600\n}"
+            }
+          ]
+        },
+        {
+          "name": "Iniciar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Verifica el email normalizado y la contraseña contra el hash BCrypt. Responde 200 con AuthResponse: perfil público en user y sesión JWT en accessToken, tokenType y expiresIn. Las credenciales incorrectas responden 401 UNAUTHORIZED sin revelar si el email existe. Ejecutar después de 'Registrar usuario' para reutilizar {{userEmail}} y {{userId}}; guarda el nuevo accessToken en {{authToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve AuthResponse con user, accessToken, tokenType y expiresIn', () => { pm.expect(body).to.have.all.keys('user', 'accessToken', 'tokenType', 'expiresIn'); });",
+                  "pm.test('devuelve el mismo usuario del registro', () => pm.expect(body.user.id).to.eql(pm.collectionVariables.get('userId')));",
+                  "pm.test('devuelve un accessToken JWT con tres segmentos', () => { pm.expect(body.accessToken).to.be.a('string').and.not.empty; pm.expect(body.accessToken.split('.')).to.have.lengthOf(3); });",
+                  "pm.test('tokenType es Bearer y expiresIn es numérico', () => { pm.expect(body.tokenType).to.eql('Bearer'); pm.expect(body.expiresIn).to.be.a('number'); });",
+                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; pm.expect(body.user.password).to.be.undefined; pm.expect(body.user.passwordHash).to.be.undefined; });",
+                  "pm.collectionVariables.set('authToken', body.accessToken);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 - sesión iniciada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"ana.perez@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"user\": {\n    \"id\": \"6710f3a2c9e77c0012345678\",\n    \"name\": \"Ana Pérez\",\n    \"email\": \"ana.perez@example.com\",\n    \"createdAt\": \"2026-10-22T10:00:00Z\"\n  },\n  \"accessToken\": \"eyJhbGciOiJIUzI1NiJ9...\",\n  \"tokenType\": \"Bearer\",\n  \"expiresIn\": 3600\n}"
+            }
+          ]
+        },
+        {
+          "name": "Consultar usuario por id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{userId}}"
+              ]
+            },
+            "description": "Devuelve los datos públicos del usuario creado en el pedido anterior. No expone la contraseña ni su hash. Respuestas: 200 usuario encontrado, 404 usuario inexistente, 500 error interno."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve el usuario solicitado', () => pm.expect(body.id).to.eql(pm.collectionVariables.get('userId')));",
+                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; });"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 - usuario encontrado",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/{{userId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "{{userId}}"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"id\": \"6710f3a2c9e77c0012345678\",\n  \"name\": \"Ana Pérez\",\n  \"email\": \"ana.perez@example.com\",\n  \"createdAt\": \"2026-10-22T10:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Consultar mi perfil",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+            "path": [
+              "api",
+              "v1",
+              "auth",
+              "me"
+            ]
+            },
+            "description": "GET /api/v1/auth/me. Devuelve el perfil persistido del usuario identificado por el subject del JWT enviado en Authorization: Bearer. No expone la contraseña ni su hash. Respuestas: 200 perfil, 401 JWT ausente, inválido o vencido, 404 usuario eliminado, 500 error interno. Requiere haber ejecutado el registro o el login para tener {{authToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('devuelve el perfil del token', () => pm.expect(body.id).to.eql(pm.collectionVariables.get('userId')));",
+                  "pm.test('incluye name, email y createdAt', () => { pm.expect(body.name).to.be.a('string'); pm.expect(body.email).to.be.a('string'); pm.expect(body.createdAt).to.be.a('string'); });",
+                  "pm.test('no expone la contraseña ni su hash', () => { pm.expect(body.password).to.be.undefined; pm.expect(body.passwordHash).to.be.undefined; });"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 - perfil autenticado",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer eyJhbGciOiJIUzI1NiJ9..."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "me"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"id\": \"6710f3a2c9e77c0012345678\",\n  \"name\": \"Ana Pérez\",\n  \"email\": \"ana.perez@example.com\",\n  \"createdAt\": \"2026-10-22T10:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cerrar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "POST /api/v1/auth/logout. Cierra la sesión en el cliente: responde siempre 204 No Content, con o sin Authorization, y no revoca el JWT en el servidor. Después del logout, descartar {{authToken}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));",
+                  "pm.test('sin cuerpo', () => pm.expect(pm.response.text()).to.be.empty);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "204 - sesión finalizada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer eyJhbGciOiJIUzI1NiJ9..."
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/logout",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "logout"
+                  ]
+                }
+              },
+              "status": "No Content",
+              "code": 204,
+              "header": [],
+              "_postman_previewlanguage": "json",
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Errores",
+      "description": "Casos de error del contrato uniforme. El caso de email duplicado requiere haber ejecutado antes 'Registrar usuario' en la misma corrida.",
+      "item": [
+        {
+          "name": "Alta con email inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ana Pérez\",\n  \"email\": \"invalido\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El email no cumple el formato esperado. Responde 400 VALIDATION_ERROR con el campo rechazado en details."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('código VALIDATION_ERROR', () => pm.expect(body.code).to.eql('VALIDATION_ERROR'));",
+                  "pm.test('detalla el campo email', () => pm.expect(body.details[0].field).to.eql('email'));",
+                  "pm.test('incluye timestamp', () => pm.expect(body.timestamp).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 - validación",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Ana Pérez\",\n  \"email\": \"invalido\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"VALIDATION_ERROR\",\n  \"message\": \"La solicitud tiene datos inválidos\",\n  \"details\": [\n    {\n      \"field\": \"email\",\n      \"message\": \"must be a well-formed email address\"\n    }\n  ],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Alta con JSON mal formado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Ana Pérez\",",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Cuerpo JSON incompleto. Responde 400 BAD_REQUEST sin exponer detalles internos."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test('código BAD_REQUEST', () => pm.expect(body.code).to.eql('BAD_REQUEST'));",
+                  "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);",
+                  "pm.test('incluye timestamp', () => pm.expect(body.timestamp).to.be.a('string'));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "400 - solicitud inválida",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Ana Pérez\",",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"BAD_REQUEST\",\n  \"message\": \"Solicitud inválida\",\n  \"details\": [],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Alta con email duplicado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Otra Ana\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Repite el email registrado en 'Registrar usuario'. Responde 409 CONFLICT. Ejecutar después del alta de la carpeta 1."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('userEmail')) {",
+                  "  pm.collectionVariables.set('userEmail', 'ana.' + Date.now() + '@example.com');",
+                  "  console.log('Falta ejecutar el alta del flujo feliz: el 409 puede no ocurrir.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('código CONFLICT', () => pm.expect(body.code).to.eql('CONFLICT'));",
+                  "pm.test('mensaje de email ya registrado', () => pm.expect(body.message).to.eql('Email ya registrado'));",
+                  "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "409 - email ya registrado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Otra Ana\",\n  \"email\": \"ana.perez@example.com\",\n  \"password\": \"password123\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"CONFLICT\",\n  \"message\": \"Email ya registrado\",\n  \"details\": [],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Consultar usuario inexistente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/6710f3a2c9e77c00ffffffff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "6710f3a2c9e77c00ffffffff"
+              ]
+            },
+            "description": "Consulta un id que no existe. Responde 404 NOT_FOUND con el contrato uniforme."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "const body = pm.response.json();",
+                  "pm.test('código NOT_FOUND', () => pm.expect(body.code).to.eql('NOT_FOUND'));",
+                  "pm.test('menciona el id consultado', () => pm.expect(body.message).to.include('6710f3a2c9e77c00ffffffff'));",
+                  "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "404 - usuario inexistente",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/users/6710f3a2c9e77c00ffffffff",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "6710f3a2c9e77c00ffffffff"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"NOT_FOUND\",\n  \"message\": \"Usuario no encontrado por id: 6710f3a2c9e77c00ffffffff\",\n  \"details\": [],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login con credenciales inválidas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"otraPassword999\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Envía una contraseña que no coincide con el usuario registrado. Responde 401 UNAUTHORIZED con el mismo mensaje genérico que un email inexistente, sin revelar qué credencial falló. Requiere el alta previa para tener {{userEmail}}."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('código UNAUTHORIZED', () => pm.expect(body.code).to.eql('UNAUTHORIZED'));",
+                  "pm.test('mensaje genérico de credenciales', () => pm.expect(body.message).to.eql('Credenciales inválidas'));",
+                  "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);",
+                  "pm.test('no devuelve accessToken', () => pm.expect(body.accessToken).to.be.undefined);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "401 - credenciales inválidas",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"ana.perez@example.com\",\n  \"password\": \"otraPassword999\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"UNAUTHORIZED\",\n  \"message\": \"Credenciales inválidas\",\n  \"details\": [],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Perfil sin token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+            "path": [
+              "api",
+              "v1",
+              "auth",
+              "me"
+            ]
+            },
+            "description": "Invoca GET /api/v1/auth/me sin la cabecera Authorization. Responde 401 UNAUTHORIZED con el contrato uniforme y details vacío."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test('código UNAUTHORIZED', () => pm.expect(body.code).to.eql('UNAUTHORIZED'));",
+                  "pm.test('details vacío', () => pm.expect(body.details).to.be.an('array').that.is.empty);"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "401 - token ausente",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/auth/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "auth",
+                    "me"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"code\": \"UNAUTHORIZED\",\n  \"message\": \"Credenciales inválidas\",\n  \"details\": [],\n  \"timestamp\": \"2026-10-22T10:05:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Salud",
+      "description": "Verificación de disponibilidad del servicio.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "actuator",
+                "health"
+              ]
+            },
+            "description": "Endpoint de Actuator. Responde 200 con status UP cuando el servicio y MongoDB están disponibles."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('servicio UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 - servicio disponible",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/actuator/health",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "actuator",
+                    "health"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"status\": \"UP\"\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

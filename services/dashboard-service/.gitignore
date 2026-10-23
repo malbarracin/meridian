@@ -1,0 +1,9 @@
+target/
+.m2-local/
+.maven-repository/
+*.log
+.idea/
+*.iml
+.vscode/
+.DS_Store
+.env

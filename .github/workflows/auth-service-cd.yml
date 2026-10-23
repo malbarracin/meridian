@@ -1,0 +1,10 @@
+name: Auth service deployment template
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  instructions:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo 'Deployment requires a configured cluster, image registry and MongoDB Secret. See delivery/devops-local.md.'

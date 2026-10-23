@@ -1,0 +1,32 @@
+meta {
+  name: Dashboard en modo mock
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/dashboard
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.dolar: isArray
+  res.body.fx: isArray
+  res.body.crypto: isArray
+  res.body.cryptoHistory: isArray
+  res.body.equities: isArray
+  res.body.equityCandles: isArray
+  res.body.news: isArray
+  res.body.degraded: isArray
+}
+
+docs {
+  Devuelve todas las secciones agregadas en una sola respuesta.
+
+  Ejecutar con el servicio arrancado con DASHBOARD_USE_MOCK=true: entrega fixtures
+  estáticas sin llamadas externas y degraded vacío (16 puntos de histórico BTC + ETH).
+  Respuestas: 200 datos agregados; 500 INTERNAL_ERROR si falla la orquestación.
+  Un fallo de proveedor individual no genera 5xx: se informa en degraded.
+}

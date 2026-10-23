@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: auth-service
+  data:
+    mongodb:
+      auto-index-creation: true
+
+jwt:
+  secret: test-secret-key-for-unit-tests-only-32chars
+  expiration-ms: 3600000
+
+de:
+  flapdoodle:
+    mongodb:
+      embedded:
+        version: 7.0.14

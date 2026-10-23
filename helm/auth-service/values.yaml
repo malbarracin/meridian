@@ -1,0 +1,31 @@
+replicaCount: 1
+image:
+  repository: auth-service
+  tag: local
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+service:
+  port: 8080
+springProfile: prod
+seedDemo:
+  # Only used by non-production profiles; prod always disables the seeder.
+  email: demo@example.com
+  # Required pre-created Secret with SEED_DEMO_PASSWORD for dev/docker/test profiles.
+  existingSecret: ""
+mongo:
+  database: auth
+  # Pre-created Secret containing MONGO_URI. MongoDB is external to this chart.
+  existingSecret: auth-mongodb
+  # Used only when existingSecret is empty; supply via an ignored values file.
+  uri: ""
+jwt:
+  # Pre-created Secret containing JWT_SECRET (>=32 bytes); no production key in Git.
+  existingSecret: auth-jwt
+  expirationMs: "86400000"
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
