@@ -461,6 +461,17 @@ sin variables JWT globales y confirmar el gate JaCoCo de 80%.
 
 ### Corrección del PR #6 (2026-10-23)
 
+Reverificación del 2026-10-24: el seed ya exige `SEED_DEMO_PASSWORD` sin fallback,
+rechaza valores en blanco y conserva BCrypt y la exclusión de prod. Se completó el
+runbook de MongoDB con la consulta a `/api/v1/auth/me` mediante `login.accessToken`
+y la contraseña obligatoria en la preparación del entorno.
+Desde `services/auth-service`, `.\mvnw.cmd -B clean verify` volvió a ejecutar
+137 tests: 125 correctos y 12 errores por Docker inaccesible.
+`.\mvnw.cmd -B verify '-Dtest=*,!AuthIntegrationTest,!LoginIntegrationTest,!ProfileIntegrationTest'`
+terminó en `BUILD SUCCESS`, incluido el gate JaCoCo del 80 %. Para validar la suite
+completa queda pendiente repetir `clean verify` con Docker accesible.
+`.\mvnw.cmd -q dependency:tree -Dverbose` terminó con código 0.
+
 - Se eliminó la contraseña predeterminada del seed. Con dev/docker/test se requiere
   `SEED_DEMO_PASSWORD` no vacía, incluso si el usuario ya existe. Compose la exige en `.env`;
   en Helm se suministra mediante `seedDemo.existingSecret`. Prod sigue desactivando el seed.

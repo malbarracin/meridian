@@ -54,7 +54,7 @@ Notas:
 ```powershell
 Set-Location services/auth-service
 Copy-Item .env.example .env
-# Completar en .env: MONGO_USER, MONGO_PASSWORD y JWT_SECRET (mínimo 32 bytes ASCII).
+# Completar en .env: MONGO_USER, MONGO_PASSWORD, JWT_SECRET (mínimo 32 bytes ASCII) y SEED_DEMO_PASSWORD.
 docker compose config --quiet
 docker compose up --build -d --wait
 docker compose ps
@@ -66,7 +66,7 @@ Linux/macOS:
 ```bash
 cd services/auth-service
 cp .env.example .env
-# Completar en .env: MONGO_USER, MONGO_PASSWORD y JWT_SECRET.
+# Completar en .env: MONGO_USER, MONGO_PASSWORD, JWT_SECRET y SEED_DEMO_PASSWORD.
 docker compose config --quiet
 docker compose up --build -d --wait
 docker compose ps
@@ -144,7 +144,8 @@ $created = Invoke-RestMethod http://localhost:8080/api/v1/auth/register -Method 
 docker compose restart auth-service
 docker compose up -d --wait
 $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body
-if ($login.user.id -ne $created.user.id) { throw 'El usuario no coincide tras reiniciar Auth' }
+$profile = Invoke-RestMethod http://localhost:8080/api/v1/auth/me -Headers @{ Authorization = ('Bearer ' + $login.accessToken) }
+if ($profile.id -ne $created.user.id) { throw 'El usuario no coincide tras reiniciar Auth' }
 ```
 
 ## Reset de datos de demo
@@ -179,7 +180,7 @@ curl -s http://localhost:8080/actuator/health
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `required variable MONGO_USER is missing a value: Set MONGO_USER in .env` al ejecutar cualquier comando de Compose | Falta `.env`, está incompleto, o se ejecuta desde otra carpeta | Crear `.env` desde `.env.example`, completar `MONGO_USER`, `MONGO_PASSWORD` y `JWT_SECRET` y ejecutar desde `services/auth-service` |
+| `required variable MONGO_USER is missing a value: Set MONGO_USER in .env` al ejecutar cualquier comando de Compose | Falta `.env`, está incompleto, o se ejecuta desde otra carpeta | Crear `.env` desde `.env.example`, completar `MONGO_USER`, `MONGO_PASSWORD`, `JWT_SECRET` y `SEED_DEMO_PASSWORD` y ejecutar desde `services/auth-service` |
 | MongoDB queda `unhealthy` y el health log muestra `MongoServerError: Authentication failed.` | El volumen ya existía inicializado con otras credenciales; `MONGO_INITDB_ROOT_*` solo se aplica al crear el volumen | Para una demo descartable, `docker compose down --volumes` y volver a levantar; para conservar datos, crear/rotar el usuario con `mongosh` autenticado como administrador |
 | Auth falla al conectar con `Authentication failed` mientras MongoDB está healthy | `MONGO_URI`/`MONGO_DATABASE` del contenedor no coinciden con las credenciales de MongoDB (por ejemplo, app fuera de Docker apuntando a otro usuario) o el contenedor quedó con variables viejas | Revisar `.env` en privado sin volcar variables, recrear con `docker compose up -d --force-recreate auth-service` y, fuera de Compose, usar una URI con las mismas credenciales y `authSource=admin` |
 | `Connection refused` en los logs de Auth | MongoDB todavía no está healthy, o la URI apunta al host equivocado | `docker compose ps`, `docker compose logs mongodb`; dentro de Compose el host es `mongodb`, desde el host es `localhost` |
