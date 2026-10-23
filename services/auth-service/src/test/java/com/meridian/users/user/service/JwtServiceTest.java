@@ -35,6 +35,14 @@ class JwtServiceTest {
     private final JwtService jwtService = new JwtService(new JwtConfig(SECRET, EXPIRATION_MS));
 
     @Test
+    @DisplayName("La vigencia en segundos deriva de los milisegundos configurados")
+    void convierteVigenciaConfiguradaASegundos() {
+        JwtService service = new JwtService(new com.meridian.users.config.JwtConfig(
+                "test-secret-with-at-least-32-bytes-long", 73_999));
+        assertThat(service.expirationSeconds()).isEqualTo(73);
+    }
+
+    @Test
     @DisplayName("Genera un JWT HS256 valido con identidad, email normalizado y vigencia configurada")
     void generaTokenConClaimsYVigenciaConfigurados() {
         Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);

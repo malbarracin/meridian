@@ -25,15 +25,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * H2.3 — GET /api/v1/users/me contra MongoDB real (Testcontainers): perfil persistido y rechazos 401.
+ * H2.3 — GET /api/v1/auth/me contra MongoDB real (Testcontainers): perfil persistido y rechazos 401.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class ProfileIntegrationTest extends MongoTestContainer {
 
-    private static final String USERS_PATH = "/api/v1/users";
-    private static final String PROFILE_PATH = "/api/v1/users/me";
+    private static final String REGISTER_PATH = "/api/v1/auth/register";
+    private static final String PROFILE_PATH = "/api/v1/auth/me";
     private static final String NAME = "Usuario Ejemplo";
     private static final String EMAIL = "usuario@ejemplo.com";
     private static final String REGISTER_BODY = """
@@ -57,14 +57,14 @@ class ProfileIntegrationTest extends MongoTestContainer {
     @Test
     @DisplayName("GET /me con JWT de registro responde 200 con el perfil persistido sin passwordHash")
     void meLeePerfilPersistido() throws Exception {
-        MvcResult registerResult = mockMvc.perform(post(USERS_PATH)
+        MvcResult registerResult = mockMvc.perform(post(REGISTER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(REGISTER_BODY))
                 .andExpect(status().isCreated())
                 .andReturn();
         JsonNode registerBody = objectMapper.readTree(registerResult.getResponse().getContentAsString());
         String userId = registerBody.path("user").path("id").asText();
-        String token = registerBody.path("token").asText();
+        String token = registerBody.path("accessToken").asText();
         User persisted = userRepository.findById(userId).orElseThrow();
 
         mockMvc.perform(get(PROFILE_PATH).header("Authorization", "Bearer " + token))
@@ -85,13 +85,13 @@ class ProfileIntegrationTest extends MongoTestContainer {
     @Test
     @DisplayName("GET /me con JWT alterado responde 401 UNAUTHORIZED con contrato de error")
     void meConTokenInvalido401() throws Exception {
-        MvcResult registerResult = mockMvc.perform(post(USERS_PATH)
+        MvcResult registerResult = mockMvc.perform(post(REGISTER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(REGISTER_BODY))
                 .andExpect(status().isCreated())
                 .andReturn();
         String token = objectMapper.readTree(registerResult.getResponse().getContentAsString())
-                .path("token").asText();
+                .path("accessToken").asText();
         int signatureStart = token.lastIndexOf('.') + 1;
         char replacement = token.charAt(signatureStart) == 'A' ? 'B' : 'A';
         String alteredToken = token.substring(0, signatureStart) + replacement

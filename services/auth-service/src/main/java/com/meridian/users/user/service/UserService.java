@@ -52,7 +52,7 @@ public class UserService {
         User savedUser = userRepository.save(user);
         UserResponse response = userMapper.toResponse(savedUser);
         String token = jwtService.generateToken(savedUser.getId(), savedUser.getEmail());
-        return new AuthResponse(response, token);
+        return new AuthResponse(response, token, AuthResponse.TOKEN_TYPE, jwtService.expirationSeconds());
     }
 
     /**
@@ -69,7 +69,8 @@ public class UserService {
             throw new InvalidCredentialsException();
         }
         String token = jwtService.generateToken(user.getId(), user.getEmail());
-        return new AuthResponse(userMapper.toResponse(user), token);
+        return new AuthResponse(userMapper.toResponse(user), token, AuthResponse.TOKEN_TYPE,
+                jwtService.expirationSeconds());
     }
 
     /**

@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class LoginIntegrationTest extends MongoTestContainer {
 
-    private static final String USERS_PATH = "/api/v1/users";
+    private static final String REGISTER_PATH = "/api/v1/auth/register";
     private static final String LOGIN_PATH = "/api/v1/auth/login";
     private static final String EMAIL = "usuario@ejemplo.com";
     private static final String REGISTER_BODY = """
@@ -65,7 +65,7 @@ class LoginIntegrationTest extends MongoTestContainer {
     @Test
     @DisplayName("Login correcto tras registro responde 200 con JWT cuyo subject es el id del usuario")
     void loginCorrecto200ConJwt() throws Exception {
-        MvcResult registerResult = mockMvc.perform(post(USERS_PATH)
+        MvcResult registerResult = mockMvc.perform(post(REGISTER_PATH)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(REGISTER_BODY))
                 .andExpect(status().isCreated())
@@ -79,15 +79,15 @@ class LoginIntegrationTest extends MongoTestContainer {
                                 {"email":"usuario@ejemplo.com","password":"miPassword123"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", aMapWithSize(2)))
+                .andExpect(jsonPath("$", aMapWithSize(4)))
                 .andExpect(jsonPath("$.user.id").value(userId))
                 .andExpect(jsonPath("$.user.email").value(EMAIL))
                 .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
-                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
                 .andReturn();
 
         JsonNode body = objectMapper.readTree(loginResult.getResponse().getContentAsString());
-        String token = body.get("token").asText();
+        String token = body.get("accessToken").asText();
         SecretKey signingKey = Keys.hmacShaKeyFor(jwtConfig.secret().getBytes(StandardCharsets.UTF_8));
         String subject = Jwts.parser()
                 .verifyWith(signingKey)
@@ -102,7 +102,7 @@ class LoginIntegrationTest extends MongoTestContainer {
     @Test
     @DisplayName("Login con password incorrecto responde 401 UNAUTHORIZED con contrato de error")
     void loginPasswordIncorrecto401() throws Exception {
-        mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content(REGISTER_BODY))
+        mockMvc.perform(post(REGISTER_PATH).contentType(MediaType.APPLICATION_JSON).content(REGISTER_BODY))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post(LOGIN_PATH).contentType(MediaType.APPLICATION_JSON).content("""
@@ -114,7 +114,7 @@ class LoginIntegrationTest extends MongoTestContainer {
                 .andExpect(jsonPath("$.message").value("Credenciales inválidas"))
                 .andExpect(jsonPath("$.details").isEmpty())
                 .andExpect(jsonPath("$.timestamp").isString())
-                .andExpect(jsonPath("$.token").doesNotExist());
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
     }
 
     @Test
@@ -129,6 +129,6 @@ class LoginIntegrationTest extends MongoTestContainer {
                 .andExpect(jsonPath("$.message").value("Credenciales inválidas"))
                 .andExpect(jsonPath("$.details").isEmpty())
                 .andExpect(jsonPath("$.timestamp").isString())
-                .andExpect(jsonPath("$.token").doesNotExist());
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
     }
 }

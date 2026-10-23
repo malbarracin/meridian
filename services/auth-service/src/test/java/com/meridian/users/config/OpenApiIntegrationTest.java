@@ -35,8 +35,15 @@ class OpenApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Auth Service API"))
                 .andExpect(jsonPath("$.info.version").value("1.0"))
-                .andExpect(jsonPath("$.paths['/api/v1/users'].post.responses['201']").exists())
-                .andExpect(jsonPath("$.paths['/api/v1/users'].post.responses['409']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post.responses['400']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['400']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['401']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/me'].get.responses['200']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/me'].get.responses['401']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.responses['204']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post.responses['201']").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/auth/register'].post.responses['409']").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/users/{id}'].get.responses['404']").exists())
                 .andExpect(jsonPath("$.components.schemas.UserResponse.properties.passwordHash").doesNotExist());
     }
@@ -44,7 +51,7 @@ class OpenApiIntegrationTest {
     @Test
     @DisplayName("OpenAPI documenta el registro con perfil público y token de acceso")
     void documentaRegistroConAuthResponse() throws Exception {
-        String responsesPath = "$.paths['/api/v1/users'].post.responses";
+        String responsesPath = "$.paths['/api/v1/auth/register'].post.responses";
         String createdContentPath = responsesPath + "['201'].content['application/json']";
 
         mockMvc.perform(get("/v3/api-docs"))
@@ -53,16 +60,22 @@ class OpenApiIntegrationTest {
                         .value("#/components/schemas/AuthResponse"))
                 .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.user.id").isNotEmpty())
                 .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.user.email").isNotEmpty())
-                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.token").isNotEmpty())
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.user['$ref']")
                         .value("#/components/schemas/UserResponse"))
-                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.token.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.accessToken.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.tokenType.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.expiresIn.type").value("integer"))
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.tokenType")
+                        .value("Bearer"))
+                .andExpect(jsonPath(createdContentPath + ".examples['Usuario creado'].value.expiresIn").value(3600))
+                .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.token").doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.AuthResponse.properties.passwordHash").doesNotExist())
                 .andExpect(jsonPath(responsesPath + "['400'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"))
                 .andExpect(jsonPath(responsesPath + "['409'].content['application/json'].schema['$ref']")
                         .value("#/components/schemas/ErrorResponse"))
-                .andExpect(jsonPath("$.paths['/api/v1/auth/register']").doesNotExist());
+                .andExpect(jsonPath("$.paths['/api/v1/users']").doesNotExist());
     }
 
     @Test

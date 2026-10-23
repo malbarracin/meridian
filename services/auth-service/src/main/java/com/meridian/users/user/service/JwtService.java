@@ -51,6 +51,11 @@ public class JwtService {
                 .compact();
     }
 
+    /** @return vigencia configurada de los tokens de acceso en segundos */
+    public long expirationSeconds() {
+        return java.time.Duration.ofMillis(jwtConfig.expirationMs()).toSeconds();
+    }
+
     /**
      * Verifica la firma HS256 y la expiracion del token.
      *

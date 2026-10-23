@@ -55,10 +55,14 @@ class OpenApiExportTest {
         Files.writeString(outputDirectory.resolve("openapi.yaml"), yaml, StandardCharsets.UTF_8);
 
         JsonNode paths = mapper.readTree(json).path("paths");
-        assertThat(paths.has("/api/v1/users")).isTrue();
+        assertThat(paths.has("/api/v1/auth/register")).isTrue();
         assertThat(paths.has("/api/v1/users/{id}")).isTrue();
-        assertThat(paths.path("/api/v1/users").path("post").has("requestBody")).isTrue();
-        assertThat(paths.path("/api/v1/users").path("post").path("responses").has("409")).isTrue();
+        assertThat(paths.has("/api/v1/auth/login")).isTrue();
+        assertThat(paths.has("/api/v1/auth/me")).isTrue();
+        assertThat(paths.has("/api/v1/auth/logout")).isTrue();
+        assertThat(paths.has("/api/v1/users")).isFalse();
+        assertThat(paths.path("/api/v1/auth/register").path("post").has("requestBody")).isTrue();
+        assertThat(paths.path("/api/v1/auth/register").path("post").path("responses").has("409")).isTrue();
         assertThat(paths.path("/api/v1/users/{id}").path("get").path("responses").has("404")).isTrue();
     }
 }
