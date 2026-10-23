@@ -9,15 +9,15 @@ servers:
 - url: http://localhost:8080
   description: Entorno local
 tags:
-- name: Autenticación
-  description: Obtención de tokens de acceso
 - name: Usuarios
-  description: Registro y consulta de los datos públicos de usuarios
+  description: Consulta de los datos públicos de usuarios
+- name: Autenticación
+  description: "Registro, sesión y perfil del usuario"
 paths:
-  /api/v1/users:
+  /api/v1/auth/register:
     post:
       tags:
-      - Usuarios
+      - Autenticación
       summary: Registrar usuario
       description: "Crea un usuario con nombre, email y contraseña. El email se normaliza\
         \ (trim y minúsculas) y debe ser único; la contraseña se guarda solo como\
@@ -54,7 +54,9 @@ paths:
                       name: Ana Pérez
                       email: ana.perez@example.com
                       createdAt: 2026-10-22T10:00:00Z
-                    token: eyJhbGciOiJIUzI1NiJ9...
+                    accessToken: eyJhbGciOiJIUzI1NiJ9...
+                    tokenType: Bearer
+                    expiresIn: 3600
         "400":
           description: Datos inválidos o JSON mal formado
           content:
@@ -84,6 +86,17 @@ paths:
               examples:
                 Error interno:
                   $ref: "#/components/examples/InternalError"
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Autenticación
+      summary: Cerrar sesión
+      description: "El cliente debe descartar su JWT. Responde siempre 204, incluso\
+        \ sin token o con un token inválido; no hay revocación en el servidor."
+      operationId: logout
+      responses:
+        "204":
+          description: Sesión finalizada en el cliente
   /api/v1/auth/login:
     post:
       tags:
@@ -106,6 +119,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthResponse"
+              example:
+                accessToken: eyJhbGciOiJIUzI1NiJ9...
+                tokenType: Bearer
+                expiresIn: 3600
+                user:
+                  id: 6710f3a2c9e77c0012345678
+                  name: Ana Pérez
+                  email: ana.perez@example.com
+                  createdAt: 2026-10-22T10:00:00Z
         "400":
           description: Datos inválidos o JSON mal formado
           content:
@@ -184,10 +206,10 @@ paths:
               examples:
                 Error interno:
                   $ref: "#/components/examples/InternalError"
-  /api/v1/users/me:
+  /api/v1/auth/me:
     get:
       tags:
-      - Usuarios
+      - Autenticación
       summary: Consultar mi perfil
       description: "Lee el perfil persistido usando el subject del JWT firmado y vigente\
         \ del header Authorization: Bearer <token>. No expone la contraseña ni su\
@@ -271,17 +293,28 @@ components:
       - password
     AuthResponse:
       type: object
-      description: "Respuesta de registro exitoso: perfil público del usuario y JWT\
-        \ de acceso."
+      description: "Respuesta de registro o login exitoso: perfil público del usuario\
+        \ y JWT de acceso."
       properties:
         user:
           $ref: "#/components/schemas/UserResponse"
-          description: Datos públicos del usuario recién creado.
-        token:
+          description: Datos públicos del usuario autenticado.
+        accessToken:
           type: string
           description: JWT firmado (HS256) listo para usar en cabeceras Authorization
             Bearer.
           example: eyJhbGciOiJIUzI1NiJ9...
+        tokenType:
+          type: string
+          description: Esquema de autorización.
+          enum:
+          - Bearer
+          example: Bearer
+        expiresIn:
+          type: integer
+          format: int64
+          description: Vigencia del token en segundos.
+          example: 3600
     UserResponse:
       type: object
       description: "Datos públicos del usuario, sin contraseña ni hash."
