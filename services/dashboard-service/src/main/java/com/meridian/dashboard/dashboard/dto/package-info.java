@@ -1,2 +1,2 @@
-/** Capa dto del módulo dashboard; implementación en las tareas de funcionalidad. */
+/** Contrato de salida del dashboard y de cada una de sus secciones. */
 package com.meridian.dashboard.dashboard.dto;

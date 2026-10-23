@@ -19,7 +19,13 @@ import com.meridian.dashboard.dashboard.dto.DashboardResponse;
 
 import lombok.RequiredArgsConstructor;
 
-/** Agrega las secciones en paralelo y aísla los fallos de cada proveedor. */
+/**
+ * Orquesta la agregación del dashboard: consulta cada proveedor en paralelo, aplica caché
+ * y aísla los fallos por sección para no cortar la respuesta HTTP.
+ *
+ * <p>Un fallo de un adaptador no propaga excepción al controller: la sección queda en
+ * {@code degraded} y se sirve la última respuesta buena de la caché o una lista vacía.</p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
@@ -32,7 +38,12 @@ public class DashboardService {
     private final DashboardCacheService cache;
     private final ExecutorService dashboardExecutor;
 
-    /** @return todas las secciones disponibles y los nombres de las que no tienen datos frescos. */
+    /**
+     * Construye la respuesta agregada de todas las secciones.
+     *
+     * @return datos disponibles y los nombres de las secciones sin datos frescos;
+     *         {@code cryptoHistory} se informa una sola vez aunque fallen BTC y ETH
+     */
     public DashboardResponse getDashboard() {
         var dolar = fetch("dolar", dolarAdapter::fetchDolar);
         var fx = fetch("fx", fxAdapter::fetchFx);

@@ -1,2 +1,2 @@
-/** Capa controller del módulo dashboard; implementación en las tareas de funcionalidad. */
+/** Endpoints HTTP del dashboard agregado. */
 package com.meridian.dashboard.dashboard.controller;

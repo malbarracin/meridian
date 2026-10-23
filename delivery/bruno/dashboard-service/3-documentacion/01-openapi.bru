@@ -1,0 +1,21 @@
+meta {
+  name: OpenAPI del dashboard
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{BASE_URL}}/v3/api-docs/dashboard
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.info.title: eq Dashboard Service API
+}
+
+docs {
+  Devuelve el grupo OpenAPI dashboard en JSON. El contrato completo también está en
+  /v3/api-docs y la copia versionada en delivery/openapi/dashboard-service/openapi.json.
+}
