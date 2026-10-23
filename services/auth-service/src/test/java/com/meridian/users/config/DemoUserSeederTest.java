@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.DefaultApplicationArguments;
@@ -16,6 +17,7 @@ import com.meridian.users.user.entity.User;
 import com.meridian.users.user.repository.UserRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
@@ -44,7 +46,8 @@ class DemoUserSeederTest {
         when(userRepository.findByEmail("demo@example.com"))
                 .thenReturn(Optional.empty(), Optional.of(new User()));
 
-        contextRunner.withPropertyValues("spring.profiles.active=" + profile).run(context -> {
+        contextRunner.withPropertyValues("spring.profiles.active=" + profile,
+                "SEED_DEMO_PASSWORD=ExplicitTestPass123!").run(context -> {
             DemoUserSeeder seeder = context.getBean(DemoUserSeeder.class);
             seeder.run(new DefaultApplicationArguments());
             seeder.run(new DefaultApplicationArguments());
@@ -55,8 +58,9 @@ class DemoUserSeederTest {
             User user = captured.getValue();
             assertThat(user.getEmail()).isEqualTo("demo@example.com");
             assertThat(user.getName()).isEqualTo("Demo");
-            assertThat(user.getPasswordHash()).startsWith("$2a$").isNotEqualTo("DemoPass123!");
-            assertThat(context.getBean(PasswordEncoder.class).matches("DemoPass123!", user.getPasswordHash())).isTrue();
+            assertThat(user.getPasswordHash()).startsWith("$2a$").isNotEqualTo("ExplicitTestPass123!");
+            assertThat(context.getBean(PasswordEncoder.class)
+                    .matches("ExplicitTestPass123!", user.getPasswordHash())).isTrue();
             assertThat(user.getCreatedAt()).isNotNull().isEqualTo(user.getUpdatedAt());
         });
     }
@@ -73,7 +77,8 @@ class DemoUserSeederTest {
                     ArgumentCaptor<User> captured = ArgumentCaptor.forClass(User.class);
                     verify(userRepository).save(captured.capture());
                     assertThat(captured.getValue().getEmail()).isEqualTo("ada@example.com");
-                    assertThat(captured.getValue().getPasswordHash()).startsWith("$2a$").isNotEqualTo("CustomPass123!");
+                    assertThat(captured.getValue().getPasswordHash()).startsWith("$2a$")
+                            .isNotEqualTo("CustomPass123!");
                     assertThat(context.getBean(PasswordEncoder.class)
                             .matches("CustomPass123!", captured.getValue().getPasswordHash())).isTrue();
                 });
@@ -94,11 +99,38 @@ class DemoUserSeederTest {
     void conservaUsuarioExistente() {
         when(userRepository.findByEmail("demo@example.com")).thenReturn(Optional.of(new User()));
 
-        contextRunner.withPropertyValues("spring.profiles.active=test").run(context -> {
+        contextRunner.withPropertyValues("spring.profiles.active=test",
+                "SEED_DEMO_PASSWORD=ExplicitTestPass123!").run(context -> {
             context.getBean(DemoUserSeeder.class).run(new DefaultApplicationArguments());
 
             verify(userRepository, times(0)).save(any(User.class));
             verify(userRepository).findByEmail(anyString());
+        });
+    }
+
+    @ParameterizedTest
+    @EmptySource
+    @ValueSource(strings = {" ", "   "})
+    @DisplayName("El seed rechaza contraseñas vacías antes de acceder a MongoDB")
+    void rechazaPasswordVacio(String password) {
+        contextRunner.withPropertyValues("spring.profiles.active=dev", "SEED_DEMO_PASSWORD=" + password)
+                .run(context -> {
+                    DemoUserSeeder seeder = context.getBean(DemoUserSeeder.class);
+                    assertThatIllegalStateException()
+                            .isThrownBy(() -> seeder.run(new DefaultApplicationArguments()))
+                            .withMessageContaining("SEED_DEMO_PASSWORD");
+                    verifyNoInteractions(userRepository);
+                });
+    }
+
+    @Test
+    @DisplayName("El seed rechaza la contraseña ausente antes de acceder a MongoDB")
+    void rechazaPasswordSinConfigurar() {
+        contextRunner.withPropertyValues("spring.profiles.active=dev").run(context -> {
+            assertThatIllegalStateException()
+                    .isThrownBy(() -> context.getBean(DemoUserSeeder.class).run(new DefaultApplicationArguments()))
+                    .withMessageContaining("SEED_DEMO_PASSWORD");
+            verifyNoInteractions(userRepository);
         });
     }
 }

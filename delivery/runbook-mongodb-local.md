@@ -140,7 +140,7 @@ datos. Para comprobar el camino completo por la API (requiere el stack construid
 
 ```powershell
 $body = @{ name = 'Persistencia'; email = ('persist-' + [guid]::NewGuid().ToString('N') + '@example.com'); password = 'SmokeTest123!' } | ConvertTo-Json
-$created = Invoke-RestMethod http://localhost:8080/api/v1/users -Method Post -ContentType 'application/json' -Body $body
+$created = Invoke-RestMethod http://localhost:8080/api/v1/auth/register -Method Post -ContentType 'application/json' -Body $body
 docker compose restart auth-service
 docker compose up -d --wait
 $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body

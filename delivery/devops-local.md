@@ -167,11 +167,11 @@ Verificar persistencia con un usuario único (ajustar el puerto si se cambió `P
 
 ```powershell
 $body = @{ name = 'Persistencia'; email = ('persist-' + [guid]::NewGuid().ToString('N') + '@example.com'); password = 'SmokeTest123!' } | ConvertTo-Json
-$created = Invoke-RestMethod http://localhost:8080/api/v1/users -Method Post -ContentType 'application/json' -Body $body
+$created = Invoke-RestMethod http://localhost:8080/api/v1/auth/register -Method Post -ContentType 'application/json' -Body $body
 docker compose restart auth-service
 docker compose up -d --wait
 $login = Invoke-RestMethod http://localhost:8080/api/v1/auth/login -Method Post -ContentType 'application/json' -Body $body
-$profile = Invoke-RestMethod http://localhost:8080/api/v1/users/me -Headers @{ Authorization = ('Bearer ' + $login.token) }
+$profile = Invoke-RestMethod http://localhost:8080/api/v1/auth/me -Headers @{ Authorization = ('Bearer ' + $login.accessToken) }
 if ($profile.id -ne $created.user.id) { throw 'El usuario no coincide tras reiniciar Auth' }
 # Verificar también conservación del volumen al detener todo el stack:
 docker compose down
@@ -314,8 +314,8 @@ El servicio garantiza el índice durante el arranque. No se realizó deploy real
 ### Cierre TASK-54 (2026-10-23)
 
 TASK-53 incorpora `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD`. Compose acepta ambos
-desde el `.env` privado; si están vacíos usa los defaults públicos del seed
-(`demo@example.com` / `DemoPass123!`). Son credenciales de demostración, solo para
+desde el `.env` privado; `SEED_DEMO_PASSWORD` es obligatoria y no tiene valor por defecto.
+Si falta o está vacía, Compose rechaza la configuración. El email por defecto es `demo@example.com`, solo para
 dev/docker/test. El perfil prod siempre desactiva el seed, incluso combinado con
 otros perfiles. Reiniciar no modifica la contraseña ni los datos de un usuario existente.
 Para cambiar credenciales existentes se requiere el flujo de gestión del usuario;
@@ -324,7 +324,8 @@ cambiar estas variables no las rota.
 Helm permite `seedDemo.email` en ConfigMap y `seedDemo.existingSecret` como referencia
 a un Secret externo con clave `SEED_DEMO_PASSWORD`. No guardar contraseñas en values.
 Con values-dev se activa docker y el seed; values-prod mantiene prod y lo desactiva.
-El Secret opcional se aprovisiona por el gestor de secretos antes de instalar el chart.
+El Secret es obligatorio con el seed activo y se aprovisiona antes de instalar el chart.
+Sin contraseña o con un valor vacío, el arranque del servicio falla.
 
 El smoke de registro/login/me de arriba usa ahora `/api/v1/auth/register`,
 `/api/v1/auth/me` y `accessToken`, según TASK-52. Healthchecks y probes conservan
@@ -420,7 +421,7 @@ sin variables JWT globales y confirmar el gate JaCoCo de 80%.
   wrapper y JAR Spring Boot completo con dependencias runtime JJWT; no requiere cambios.
 - El build Docker omite tests y no requiere JWT_SECRET durante compilación;
   la clave se inyecta únicamente al ejecutar el contenedor.
-- El smoke correcto es `/actuator/health` y, opcionalmente, `POST /api/v1/users`;
+- El smoke correcto es `/actuator/health` y, opcionalmente, `POST /api/v1/auth/register`;
   la ruta `/api/v1/auth/register` del AC original es obsoleta.
 
 ### Verificación previa H2.1
@@ -457,3 +458,20 @@ sin variables JWT globales y confirmar el gate JaCoCo de 80%.
   `helm template` indicados arriba (AC #12); no se instaló ni descargó Helm.
 - Ejecución remota de GitHub Actions, build Linux/Flapdoodle y despliegue en un cluster
   requieren esos entornos; los comandos Maven equivalentes pasaron localmente en Windows.
+
+### Corrección del PR #6 (2026-10-23)
+
+- Se eliminó la contraseña predeterminada del seed. Con dev/docker/test se requiere
+  `SEED_DEMO_PASSWORD` no vacía, incluso si el usuario ya existe. Compose la exige en `.env`;
+  en Helm se suministra mediante `seedDemo.existingSecret`. Prod sigue desactivando el seed.
+- Los runbooks usan `/api/v1/auth/register`, `/api/v1/auth/me` y `login.accessToken`.
+- Desde `services/auth-service`, `.\mvnw.cmd -q -B clean verify` ejecutó 137 tests:
+  125 correctos y 12 errores de integraciones Docker por acceso denegado a
+  `\\.\pipe\docker_engine`. Repetir ese comando con acceso al daemon para validar toda la suite.
+- `.\mvnw.cmd -q -B verify '-Dtest=*,!AuthIntegrationTest,!LoginIntegrationTest,!ProfileIntegrationTest'`
+  pasó con las pruebas restantes, incluida la integración del seed con MongoDB embebido.
+  JaCoCo: 175 líneas cubiertas de 178 (98,31 %); gate del 80 % sin cambios.
+- Tras ajustar el formato del test, `.\mvnw.cmd -q -B test '-Dtest=DemoUserSeederTest'` pasó
+  sus 14 casos. `docker compose --env-file .env.example config --quiet` pasó con variables
+  ficticias de validación. Helm no está instalado: quedan pendientes `helm lint helm/auth-service`
+  y los comandos `helm template` anteriores.

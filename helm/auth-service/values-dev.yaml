@@ -2,7 +2,7 @@ replicaCount: 1
 springProfile: docker
 seedDemo:
   email: demo@example.com
-  # Supply a pre-created Secret with SEED_DEMO_PASSWORD to override the demo default.
+  # Supply a pre-created Secret with SEED_DEMO_PASSWORD before deployment.
   existingSecret: ""
 mongo:
   database: auth_dev

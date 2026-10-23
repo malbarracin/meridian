@@ -86,8 +86,8 @@ perfil del `id` registrado. El logout valida `204` sin cuerpo. Los errores de lo
 o inválido se validan con `401 UNAUTHORIZED` y `details` vacío. No copiar tokens reales a tickets,
 capturas ni repositorios.
 
-En los perfiles `dev`, `docker` y `test` el servicio crea un usuario de demo (`demo@example.com` /
-`DemoPass123!`) al arrancar. Se puede usar para repetir el login y `/me` sin registrar un usuario
+En los perfiles `dev`, `docker` y `test` el servicio crea un usuario de demo (`demo@example.com`,
+con contraseña obligatoria mediante `SEED_DEMO_PASSWORD`) al arrancar. Se puede repetir el login y `/me` sin registrar un usuario
 nuevo; se configura con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD` y no existe con `prod`.
 
 ### Collection Runner
@@ -119,7 +119,7 @@ newman run delivery/postman/auth-service.postman_collection.json `
    `1-flujo-feliz` → `2-errores` → `3-salud`.
 
 Los pedidos, nombres, orden y datos son los mismos que en Postman. El registro genera `userEmail` y
-guarda `userId` y `authToken` (accessToken) en variables de la corrida; el login, `GET /api/v1/auth/me` y `POST /api/v1/auth/logout` reutilizan esas variables, y el pedido de email duplicado depende del registro previo. El token del ejemplo es un marcador: el valor real cambia en cada ejecución. También se puede usar el usuario de demo (`demo@example.com` / `DemoPass123!`) cuando el seed está activo.
+guarda `userId` y `authToken` (accessToken) en variables de la corrida; el login, `GET /api/v1/auth/me` y `POST /api/v1/auth/logout` reutilizan esas variables, y el pedido de email duplicado depende del registro previo. El token del ejemplo es un marcador: el valor real cambia en cada ejecución. También se puede usar el usuario de demo con la contraseña configurada en `SEED_DEMO_PASSWORD` cuando el seed está activo.
 
 ### Importar desde Postman u OpenAPI
 

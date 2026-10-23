@@ -56,11 +56,11 @@ arrancar, de forma idempotente:
 | Campo | Valor por defecto |
 |---|---|
 | email | `demo@example.com` |
-| password | `DemoPass123!` |
+| password | Obligatoria mediante `SEED_DEMO_PASSWORD`, sin valor por defecto |
 | name | `Demo` |
 
 Se configura con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD`; se desactiva arrancando sin esos perfiles.
-Las credenciales por defecto son públicas y solo para entornos no productivos. Sirven para probar el
+Si la contraseña falta o está vacía, el arranque con seed activo falla. Las credenciales sirven para probar el
 login y los endpoints autenticados sin registrar un usuario nuevo.
 
 ## POST /api/v1/auth/register — registrar usuario

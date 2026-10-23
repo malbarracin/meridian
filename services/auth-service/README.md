@@ -130,7 +130,7 @@ Las variables de conexión a MongoDB (`MONGO_USER`, `MONGO_PASSWORD`, `MONGO_DAT
 | `JWT_SECRET` | Clave HMAC-SHA256 para firmar los JWT; mínimo 32 bytes | Sin valor: obligatoria |
 | `JWT_EXPIRATION_MS` | Vigencia del JWT en milisegundos | `86400000` (24 horas) |
 | `SEED_DEMO_EMAIL` | Email del usuario de demo que crea el seed | `demo@example.com` |
-| `SEED_DEMO_PASSWORD` | Contraseña del usuario de demo (se guarda como hash BCrypt) | `DemoPass123!` |
+| `SEED_DEMO_PASSWORD` | Contraseña del usuario de demo (se guarda como hash BCrypt) | Sin valor: obligatoria con seed activo |
 | `PORT` | Puerto HTTP del servicio | `8080` |
 | `SPRING_PROFILES_ACTIVE` | Perfil activo (`dev`, `docker`, `test`, `prod`) | Sin perfil |
 | `springdoc.swagger-ui.enabled` | Swagger UI | `false` en el perfil `prod` |
@@ -152,10 +152,11 @@ no duplica el usuario ni modifica sus datos, por lo que puede correr en cada rei
 | Credencial | Valor por defecto |
 |---|---|
 | Email | `demo@example.com` |
-| Contraseña | `DemoPass123!` |
+| Contraseña | Obligatoria mediante `SEED_DEMO_PASSWORD`, sin valor por defecto |
 | Nombre | `Demo` |
 
-- Configurar otro usuario con `SEED_DEMO_EMAIL` y `SEED_DEMO_PASSWORD` (el email se normaliza a
+- Configurar `SEED_DEMO_PASSWORD` antes de arrancar; si falta o está vacía, el arranque falla.
+  El email se configura con `SEED_DEMO_EMAIL` (se normaliza a
   minúsculas y la contraseña se guarda como hash BCrypt).
 - Desactivar el seed: arrancar sin `dev`, `docker` ni `test` (perfil por defecto o `prod`). No hay una
   variable de entorno para apagarlo con esos perfiles activos.
@@ -167,7 +168,7 @@ Con el seed activo se puede probar el login sin registrar un usuario:
 ```bash
 curl -i -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"demo@example.com","password":"DemoPass123!"}'
+  -d "$(jq -n --arg password "$SEED_DEMO_PASSWORD" '{email:"demo@example.com",password:$password}')"
 ```
 
 ## API

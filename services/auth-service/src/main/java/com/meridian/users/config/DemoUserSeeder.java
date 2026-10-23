@@ -19,7 +19,7 @@ import lombok.RequiredArgsConstructor;
  * Crea el usuario demo solo en dev, docker o test; prod siempre lo desactiva, incluso con perfiles combinados.
  * Sin esos perfiles el seed es opcional y permanece desactivado.
  * Las variables SEED_DEMO_EMAIL y SEED_DEMO_PASSWORD permiten configurar las credenciales;
- * sus valores por defecto son demo@example.com y DemoPass123!, exclusivamente para entornos no productivos.
+ * el email por defecto es demo@example.com y la contraseña es obligatoria, sin valor por defecto.
  * Un usuario existente conserva sus credenciales y datos en cada reinicio.
  */
 @Component
@@ -34,6 +34,10 @@ public class DemoUserSeeder implements ApplicationRunner {
     /** @param args argumentos de arranque; la carga se configura mediante el entorno de Spring */
     @Override
     public void run(ApplicationArguments args) {
+        String password = environment.getRequiredProperty("SEED_DEMO_PASSWORD");
+        if (password.isBlank()) {
+            throw new IllegalStateException("SEED_DEMO_PASSWORD debe contener una contraseña no vacía");
+        }
         String email = environment.getProperty("SEED_DEMO_EMAIL", "demo@example.com")
                 .trim().toLowerCase(Locale.ROOT);
         if (userRepository.findByEmail(email).isPresent()) {
@@ -44,7 +48,7 @@ public class DemoUserSeeder implements ApplicationRunner {
         User user = new User();
         user.setName("Demo");
         user.setEmail(email);
-        user.setPasswordHash(passwordEncoder.encode(environment.getProperty("SEED_DEMO_PASSWORD", "DemoPass123!")));
+        user.setPasswordHash(passwordEncoder.encode(password));
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         userRepository.save(user);

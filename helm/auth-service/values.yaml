@@ -10,7 +10,7 @@ springProfile: prod
 seedDemo:
   # Only used by non-production profiles; prod always disables the seeder.
   email: demo@example.com
-  # Optional pre-created Secret with SEED_DEMO_PASSWORD. Empty uses the public demo default.
+  # Required pre-created Secret with SEED_DEMO_PASSWORD for dev/docker/test profiles.
   existingSecret: ""
 mongo:
   database: auth

@@ -256,9 +256,9 @@ Perfiles:
 | `prod` | Desactivado; lo crea el operador | Producción |
 
 `DemoUserSeeder` (`@Profile("(dev | docker | test) & !prod")`) crea al arranque un usuario de demo
-idempotente (`demo@example.com` / `DemoPass123!` por defecto; configurable con `SEED_DEMO_EMAIL` y
-`SEED_DEMO_PASSWORD`). Si el email ya existe, no lo modifica. Con `prod` o sin esos perfiles el bean
-no se registra. Las credenciales por defecto son públicas y solo para entornos no productivos.
+idempotente (email por defecto `demo@example.com`, configurable con `SEED_DEMO_EMAIL`).
+`SEED_DEMO_PASSWORD` es obligatoria: si falta o está vacía, el arranque falla antes de consultar MongoDB.
+Si el email ya existe, no lo modifica. Con `prod` o sin esos perfiles el bean no se registra.
 
 En `prod`, Swagger UI y el endpoint de OpenAPI están deshabilitados (`springdoc.swagger-ui.enabled`
 y `springdoc.api-docs.enabled` en `false`).
