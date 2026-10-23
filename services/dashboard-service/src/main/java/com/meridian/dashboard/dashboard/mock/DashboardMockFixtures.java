@@ -3,18 +3,45 @@ package com.meridian.dashboard.dashboard.mock;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import com.meridian.dashboard.dashboard.dto.CandleResponse;
+import com.meridian.dashboard.dashboard.dto.CryptoPricePoint;
+import com.meridian.dashboard.dashboard.dto.CryptoResponse;
 import com.meridian.dashboard.dashboard.dto.DolarResponse;
 import com.meridian.dashboard.dashboard.dto.EquityQuoteResponse;
 import com.meridian.dashboard.dashboard.dto.FxRateResponse;
 import com.meridian.dashboard.dashboard.dto.NewsArticleResponse;
 import com.meridian.dashboard.dashboard.dto.OhlcPoint;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 /** Datos de demostración estáticos; no representan cotizaciones actuales. */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DashboardMockFixtures {
 
-    private DashboardMockFixtures() {
+    private static final Instant HISTORY_START = Instant.parse("2026-10-15T00:00:00Z");
+    private static final int DAYS = 7;
+    private static final long SECONDS_PER_DAY = 86400;
+
+    public static List<CryptoResponse> getCrypto() {
+        return List.of(
+                new CryptoResponse("bitcoin", "BTC", new BigDecimal("67000"), new BigDecimal("2.5")),
+                new CryptoResponse("ethereum", "ETH", new BigDecimal("3500"), new BigDecimal("-1.2")));
+    }
+
+    /** Serie diaria fija de BTC, mantenida como fixture por defecto. */
+    public static List<CryptoPricePoint> getCryptoHistory() {
+        return getCryptoHistory("bitcoin");
+    }
+
+    /** Siete puntos diarios estáticos para la moneda solicitada. */
+    public static List<CryptoPricePoint> getCryptoHistory(String coinId) {
+        BigDecimal price = "bitcoin".equals(coinId) ? new BigDecimal("67000") : new BigDecimal("3500");
+        return IntStream.rangeClosed(0, DAYS)
+                .mapToObj(day -> new CryptoPricePoint(HISTORY_START.plusSeconds(day * SECONDS_PER_DAY), price))
+                .toList();
     }
 
     /** @return noticias ficticias estáticas para la demostración offline. */
