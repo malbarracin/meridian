@@ -2,6 +2,7 @@ package com.meridian.users.config;
 
 import java.util.Optional;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -16,7 +17,9 @@ import com.meridian.users.user.repository.UserRepository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -28,6 +31,11 @@ class DemoUserSeederTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withUserConfiguration(DemoUserSeeder.class, SecurityConfig.class)
             .withBean(UserRepository.class, () -> userRepository);
+
+    @BeforeEach
+    void resetRepository() {
+        reset(userRepository);
+    }
 
     @ParameterizedTest
     @ValueSource(strings = {"dev", "docker", "test"})
@@ -56,6 +64,8 @@ class DemoUserSeederTest {
     @Test
     @DisplayName("Las variables de entorno configuran las credenciales y el email se normaliza")
     void configuraCredencialesDesdeEntorno() {
+        when(userRepository.findByEmail("ada@example.com")).thenReturn(Optional.empty());
+
         contextRunner.withPropertyValues("spring.profiles.active=dev", "SEED_DEMO_EMAIL=  ADA@EXAMPLE.COM  ",
                 "SEED_DEMO_PASSWORD=CustomPass123!").run(context -> {
                     context.getBean(DemoUserSeeder.class).run(new DefaultApplicationArguments());
@@ -63,6 +73,7 @@ class DemoUserSeederTest {
                     ArgumentCaptor<User> captured = ArgumentCaptor.forClass(User.class);
                     verify(userRepository).save(captured.capture());
                     assertThat(captured.getValue().getEmail()).isEqualTo("ada@example.com");
+                    assertThat(captured.getValue().getPasswordHash()).startsWith("$2a$").isNotEqualTo("CustomPass123!");
                     assertThat(context.getBean(PasswordEncoder.class)
                             .matches("CustomPass123!", captured.getValue().getPasswordHash())).isTrue();
                 });
@@ -87,6 +98,7 @@ class DemoUserSeederTest {
             context.getBean(DemoUserSeeder.class).run(new DefaultApplicationArguments());
 
             verify(userRepository, times(0)).save(any(User.class));
+            verify(userRepository).findByEmail(anyString());
         });
     }
 }
