@@ -78,15 +78,19 @@ class AuthControllerTest {
 
         String response = mockMvc.perform(post(LOGIN_PATH).contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", aMapWithSize(2)))
+                .andExpect(jsonPath("$", aMapWithSize(4)))
                 .andExpect(jsonPath("$.user", aMapWithSize(4)))
                 .andExpect(jsonPath("$.user.id").value("user-1"))
                 .andExpect(jsonPath("$.user.email").value(EMAIL))
                 .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
-                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").value(60))
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
 
-        String token = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).get("token").asText();
+        String token = new com.fasterxml.jackson.databind.ObjectMapper().readTree(response)
+                .get("accessToken").asText();
         assertThat(jwtService.isValid(token)).isTrue();
         verify(userRepository).findByEmail(EMAIL);
         verify(userRepository, never()).save(any(User.class));
@@ -107,7 +111,7 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Credenciales inválidas"))
                 .andExpect(jsonPath("$.details").isEmpty())
                 .andExpect(jsonPath("$.timestamp").isString())
-                .andExpect(jsonPath("$.token").doesNotExist());
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
     }
 
     @ParameterizedTest
@@ -129,6 +133,22 @@ class AuthControllerTest {
     @DisplayName("El DTO protege las credenciales en su representación textual")
     void ocultaCredencialesEnTexto() {
         assertThat(new LoginRequest(EMAIL, PASSWORD).toString()).doesNotContain(EMAIL, PASSWORD);
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.NullAndEmptySource
+    @ValueSource(strings = {"Bearer valid-token", "Bearer invalid-token", "Basic abc"})
+    @DisplayName("Logout responde 204 sin cuerpo con o sin Authorization y sin acceder a MongoDB")
+    void logoutSiempreDevuelve204(String authorization) throws Exception {
+        var request = post("/api/v1/auth/logout");
+        if (authorization != null) {
+            request.header("Authorization", authorization);
+        }
+
+        mockMvc.perform(request)
+                .andExpect(status().isNoContent())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(""));
+        verifyNoInteractions(userRepository);
     }
 
     @TestConfiguration(proxyBeanMethods = false)

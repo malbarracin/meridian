@@ -83,13 +83,15 @@ class UserRegistrationIntegrationTest {
         assertThat(savedUser.getUpdatedAt()).isEqualTo(savedUser.getCreatedAt());
         assertThat(response.user()).isEqualTo(new UserResponse("user-1", "Ana", "ana@example.com",
                 savedUser.getCreatedAt()));
-        assertThat(response.token()).isNotBlank();
-        assertThat(jwtService.isValid(response.token())).isTrue();
+        assertThat(response.accessToken()).isNotBlank();
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresIn()).isEqualTo(jwtService.expirationSeconds()).isPositive();
+        assertThat(jwtService.isValid(response.accessToken())).isTrue();
         SecretKey signingKey = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
         var claims = Jwts.parser()
                 .verifyWith(signingKey)
                 .build()
-                .parseSignedClaims(response.token())
+                .parseSignedClaims(response.accessToken())
                 .getPayload();
         assertThat(claims.getSubject()).isEqualTo("user-1");
         assertThat(claims.get("email", String.class)).isEqualTo("ana@example.com");

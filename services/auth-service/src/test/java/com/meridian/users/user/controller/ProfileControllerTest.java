@@ -46,7 +46,7 @@ class ProfileControllerTest {
 
     private static final String SECRET = "profile-tests-signing-secret-at-least-32-bytes";
     private static final String USER_ID = "507f1f77bcf86cd799439011";
-    private static final String PROFILE_PATH = "/api/v1/users/me";
+    private static final String PROFILE_PATH = "/api/v1/auth/me";
     private static final SecretKey KEY = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
 
     private final UserRepository repository = mock(UserRepository.class);
@@ -57,7 +57,7 @@ class ProfileControllerTest {
     void configuraEndpointConServiciosReales() {
         UserService userService = new UserService(repository, mock(PasswordEncoder.class),
                 Mappers.getMapper(UserMapper.class), jwtService);
-        mockMvc = MockMvcBuilders.standaloneSetup(new UserController(userService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(userService))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(
                         JsonMapper.builder().findAndAddModules()

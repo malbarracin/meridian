@@ -66,6 +66,7 @@ class UserServiceTest {
         UserResponse expected = new UserResponse("user-1", "Ada", "ada@example.com", Instant.now());
         when(userMapper.toResponse(persistedUser)).thenReturn(expected);
         when(jwtService.generateToken("user-1", "ada@example.com")).thenReturn(JWT_TOKEN);
+        when(jwtService.expirationSeconds()).thenReturn(73L);
 
         AuthResponse response = userService.register(REQUEST);
 
@@ -79,10 +80,12 @@ class UserServiceTest {
         assertThat(capturedUser.getValue().getPasswordHash()).isEqualTo(PASSWORD_HASH)
                 .isNotEqualTo(REQUEST.password());
         assertThat(response.user()).isSameAs(expected);
-        assertThat(response.token()).isEqualTo(JWT_TOKEN).isNotBlank();
+        assertThat(response.accessToken()).isEqualTo(JWT_TOKEN).isNotBlank();
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresIn()).isEqualTo(73);
         assertThat(AuthResponse.class.getRecordComponents())
                 .extracting(component -> component.getName())
-                .containsExactly("user", "token");
+                .containsExactly("user", "accessToken", "tokenType", "expiresIn");
         assertThat(UserResponse.class.getRecordComponents())
                 .extracting(component -> component.getName())
                 .doesNotContain("passwordHash", "password");
@@ -114,6 +117,7 @@ class UserServiceTest {
         when(passwordEncoder.matches("password123", PASSWORD_HASH)).thenReturn(true);
         when(userMapper.toResponse(user)).thenReturn(expected);
         when(jwtService.generateToken("user-1", "ada@example.com")).thenReturn(JWT_TOKEN);
+        when(jwtService.expirationSeconds()).thenReturn(73L);
 
         AuthResponse response = userService.login(request);
 
@@ -122,7 +126,9 @@ class UserServiceTest {
         verify(jwtService).generateToken("user-1", "ada@example.com");
         verify(userRepository, never()).save(any(User.class));
         assertThat(response.user()).isSameAs(expected);
-        assertThat(response.token()).isEqualTo(JWT_TOKEN);
+        assertThat(response.accessToken()).isEqualTo(JWT_TOKEN);
+        assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(response.expiresIn()).isEqualTo(73);
     }
 
     @Test

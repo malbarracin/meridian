@@ -41,7 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AuthIntegrationTest extends MongoTestContainer {
 
-    private static final String USERS_PATH = "/api/v1/users";
+    private static final String REGISTER_PATH = "/api/v1/auth/register";
     private static final String EMAIL = "usuario@ejemplo.com";
     private static final String NAME = "Usuario Ejemplo";
     private static final String PASSWORD = "miPassword123";
@@ -135,7 +135,7 @@ class AuthIntegrationTest extends MongoTestContainer {
     void persistenciaDisponibleTrasReconexion() throws Exception {
         JsonNode registered = registraUsuario(EMAIL);
         String userId = registered.path("user").path("id").asText();
-        String token = registered.path("token").asText();
+        String token = registered.path("accessToken").asText();
         var container = mongoContainer();
         String uri = container.getReplicaSetUrl();
         String separator = uri.contains("?") ? "&" : "?";
@@ -154,7 +154,7 @@ class AuthIntegrationTest extends MongoTestContainer {
         }
 
         await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            mockMvc.perform(get(USERS_PATH + "/me").header("Authorization", "Bearer " + token))
+            mockMvc.perform(get("/api/v1/auth/me").header("Authorization", "Bearer " + token))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.id").value(userId))
                     .andExpect(jsonPath("$.email").value(EMAIL));
@@ -165,16 +165,26 @@ class AuthIntegrationTest extends MongoTestContainer {
     }
 
     private JsonNode registraUsuario(String email) throws Exception {
-        String response = mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON)
+        String response = mockMvc.perform(post(REGISTER_PATH).contentType(MediaType.APPLICATION_JSON)
                         .content(registrationBody(email)))
                 .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresIn").isNumber())
+                .andExpect(jsonPath("$.user.id").isNotEmpty())
+                .andExpect(jsonPath("$.user.name").value(NAME))
+                .andExpect(jsonPath("$.user.email").value(email.trim().toLowerCase()))
+                .andExpect(jsonPath("$.user.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.token").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(response);
+        JsonNode body = objectMapper.readTree(response);
+        assertThat(body.path("expiresIn").asLong()).isPositive();
+        return body;
     }
 
     private void verificaDuplicado(String email) throws Exception {
-        mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content(registrationBody(email)))
+        mockMvc.perform(post(REGISTER_PATH).contentType(MediaType.APPLICATION_JSON).content(registrationBody(email)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CONFLICT"))
                 .andExpect(jsonPath("$.message").isNotEmpty())
