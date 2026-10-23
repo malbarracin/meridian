@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.meridian.users.user.dto.AuthResponse;
 import com.meridian.users.user.dto.RegisterRequest;
 import com.meridian.users.user.dto.UserResponse;
 import com.meridian.users.user.exception.DuplicateUserException;
@@ -48,18 +49,23 @@ class UserControllerTest {
     private UserService userService;
 
     @Test
-    @DisplayName("El registro devuelve 201 y solo datos públicos")
+    @DisplayName("POST /api/v1/users devuelve 201 con AuthResponse (user + token) sin passwordHash")
     void registraUsuarioSinExponerContrasena() throws Exception {
-        when(userService.register(REQUEST)).thenReturn(RESPONSE);
+        when(userService.register(REQUEST)).thenReturn(new AuthResponse(RESPONSE, "signed-token"));
 
         mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "http://localhost" + USERS_PATH + "/" + USER_ID))
-                .andExpect(jsonPath("$", aMapWithSize(4)))
-                .andExpect(jsonPath("$.id").value(USER_ID))
-                .andExpect(jsonPath("$.name").value("Ana"))
-                .andExpect(jsonPath("$.email").value("ana@example.com"))
-                .andExpect(jsonPath("$.createdAt").value("2026-10-22T10:00:00Z"))
+                .andExpect(jsonPath("$", aMapWithSize(2)))
+                .andExpect(jsonPath("$.token").value("signed-token"))
+                .andExpect(jsonPath("$.token").isNotEmpty())
+                .andExpect(jsonPath("$.user", aMapWithSize(4)))
+                .andExpect(jsonPath("$.user.id").value(USER_ID))
+                .andExpect(jsonPath("$.user.name").value("Ana"))
+                .andExpect(jsonPath("$.user.email").value("ana@example.com"))
+                .andExpect(jsonPath("$.user.createdAt").value("2026-10-22T10:00:00Z"))
+                .andExpect(jsonPath("$.user.password").doesNotExist())
+                .andExpect(jsonPath("$.user.passwordHash").doesNotExist())
                 .andExpect(jsonPath("$.password").doesNotExist())
                 .andExpect(jsonPath("$.passwordHash").doesNotExist());
         verify(userService).register(REQUEST);
@@ -69,13 +75,13 @@ class UserControllerTest {
     @ValueSource(strings = {" ana@example.com", "ana@example.com ", "  ana@example.com  "})
     @DisplayName("El registro acepta espacios alrededor del email antes de validarlo")
     void aceptaEmailConEspacios(String email) throws Exception {
-        when(userService.register(REQUEST)).thenReturn(RESPONSE);
+        when(userService.register(REQUEST)).thenReturn(new AuthResponse(RESPONSE, "signed-token"));
 
         mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content("""
                 {"name":"Ana","email":"%s","password":"password123"}
                 """.formatted(email)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.email").value("ana@example.com"));
+                .andExpect(jsonPath("$.user.email").value("ana@example.com"));
         verify(userService).register(REQUEST);
     }
 
@@ -90,6 +96,21 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").isString())
                 .andExpect(jsonPath("$.details[0].field").value("email"))
+                .andExpect(jsonPath("$.timestamp").isString());
+        verifyNoInteractions(userService);
+    }
+
+    @Test
+    @DisplayName("Una contraseña corta devuelve 400 VALIDATION_ERROR sin invocar el servicio")
+    void rechazaPasswordCorta() throws Exception {
+        mockMvc.perform(post(USERS_PATH).contentType(MediaType.APPLICATION_JSON).content("""
+                {"name":"Ana","email":"ana@example.com","password":"short"}
+                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$", aMapWithSize(4)))
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("password"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
                 .andExpect(jsonPath("$.timestamp").isString());
         verifyNoInteractions(userService);
     }

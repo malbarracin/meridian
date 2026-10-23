@@ -45,6 +45,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "auth-service.secretName" . }}
                   key: MONGO_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "Set jwt.existingSecret to a Secret containing JWT_SECRET" .Values.jwt.existingSecret | quote }}
+                  key: JWT_SECRET
           startupProbe:
             httpGet:
               path: /actuator/health

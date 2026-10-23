@@ -13,6 +13,10 @@ mongo:
   existingSecret: auth-mongodb
   # Used only when existingSecret is empty; supply via an ignored values file.
   uri: ""
+jwt:
+  # Pre-created Secret containing JWT_SECRET (>=32 bytes); no production key in Git.
+  existingSecret: auth-jwt
+  expirationMs: "86400000"
 resources:
   requests:
     cpu: 100m

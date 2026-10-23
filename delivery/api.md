@@ -12,6 +12,7 @@ Los ejemplos usan el mismo usuario que Swagger, Postman y Bruno:
 | email | `ana.perez@example.com` |
 | password | `password123` (mínimo 8 caracteres) |
 | createdAt | `2026-10-22T10:00:00Z` |
+| token | `eyJhbGciOiJIUzI1NiJ9...` (marcador de ejemplo; no es un token real) |
 
 > En Windows, `curl` es un alias de `Invoke-WebRequest` en PowerShell 5.1. Usar `curl.exe` para los
 > comandos de abajo. En Linux/macOS usar `curl` normalmente.
@@ -24,6 +25,22 @@ Los ejemplos usan el mismo usuario que Swagger, Postman y Bruno:
 - El email se normaliza (trim y minúsculas) antes de persistirse.
 - Si se repite el mismo email, la API responde `409 CONFLICT`; para volver a probar el alta usar un
   email distinto.
+- Los ejemplos de token son marcadores (`eyJhbGciOiJIUzI1NiJ9...`): la API real devuelve un JWT
+  firmado distinto en cada alta. No copiar tokens reales a documentación, tickets ni repositorios.
+
+## Configuración JWT
+
+El servicio firma los tokens con HMAC-SHA256 y necesita estas variables de entorno al arrancar:
+
+| Variable | Obligatoria | Para qué | Valor por defecto |
+|---|---|---|---|
+| `JWT_SECRET` | Sí | Clave HMAC-SHA256; mínimo 32 bytes ASCII | Sin valor: el arranque falla |
+| `JWT_EXPIRATION_MS` | No | Vigencia del token en milisegundos | `86400000` (24 horas) |
+
+En local y en Compose se puede partir de `services/auth-service/.env.example`, que contiene una clave
+pública exclusiva de desarrollo. Fuera de ese entorno, aprovisionar `JWT_SECRET` con el gestor de
+secretos y rotarla si se sospecha exposición. En producción, Helm la toma del Secret externo
+`auth-jwt` (ver `delivery/devops-local.md`). No versionar claves reales.
 
 ## POST /api/v1/users — registrar usuario
 
@@ -37,18 +54,26 @@ curl -i -X POST http://localhost:8080/api/v1/users \
   }'
 ```
 
-Respuesta `201 Created`:
+Respuesta `201 Created` (`AuthResponse`):
 
 ```json
 {
-  "id": "6710f3a2c9e77c0012345678",
-  "name": "Ana Pérez",
-  "email": "ana.perez@example.com",
-  "createdAt": "2026-10-22T10:00:00Z"
+  "user": {
+    "id": "6710f3a2c9e77c0012345678",
+    "name": "Ana Pérez",
+    "email": "ana.perez@example.com",
+    "createdAt": "2026-10-22T10:00:00Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiJ9..."
 }
 ```
 
-La respuesta no incluye `password` ni `passwordHash`.
+- `user`: perfil público del usuario persistido. No incluye `password` ni `passwordHash`.
+- `token`: JWT firmado con HS256. Claims `sub` (id del usuario), `email` (normalizado), `iat` y
+  `exp` (`JWT_EXPIRATION_MS`). El valor de este ejemplo es un marcador, no un token real.
+- Uso previsto: `Authorization: Bearer <token>` en los servicios que consuman el JWT. Este servicio
+  solo emite y valida tokens internamente; no expone un endpoint de validación.
+- La cabecera `Location` apunta a `GET /api/v1/users/{id}` con el id creado.
 
 ### Errores posibles
 
@@ -178,3 +203,5 @@ Respuesta `200 OK`:
 - Swagger UI: http://localhost:8080/swagger-ui.html
 - Colecciones: `delivery/postman/` y `delivery/bruno/auth-service/`.
 - Contrato de errores: `src/main/java/com/meridian/users/exception/GlobalExceptionHandler.java`.
+- Emisión y validación de JWT: `src/main/java/com/meridian/users/user/service/JwtService.java`.
+- Configuración JWT: `src/main/java/com/meridian/users/config/JwtConfig.java` y `application.yml`.

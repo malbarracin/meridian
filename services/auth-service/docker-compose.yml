@@ -8,6 +8,9 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       MONGO_URI: ${MONGO_URI:?Set MONGO_URI in .env}
       MONGO_DATABASE: ${MONGO_DATABASE:?Set MONGO_DATABASE in .env}
+      # Public development example only; never use in production.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-32-chars-minimum}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
       PORT: "8080"
     depends_on:
       mongodb:
