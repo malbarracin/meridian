@@ -55,6 +55,31 @@ class JwtConfigTest {
     }
 
     @ParameterizedTest
+    @ValueSource(longs = {0L, -1L, Long.MIN_VALUE})
+    @DisplayName("Falla el arranque cuando la vigencia JWT es cero o negativa")
+    void fallaArranqueConVigenciaNoPositiva(long expirationMs) {
+        contextRunner
+                .withPropertyValues("jwt.secret=" + TEST_SECRET, "jwt.expiration-ms=" + expirationMs)
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class);
+                    assertThat(context.getStartupFailure())
+                            .hasRootCauseMessage("jwt.expiration-ms debe ser mayor que cero");
+                });
+    }
+
+    @Test
+    @DisplayName("Arranca con una vigencia JWT de un milisegundo")
+    void arrancaConVigenciaPositivaMinima() {
+        contextRunner
+                .withPropertyValues("jwt.secret=" + TEST_SECRET, "jwt.expiration-ms=1")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context.getBean(JwtConfig.class).expirationMs()).isEqualTo(1L);
+                });
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"", "too-short", "1234567890123456789012345678901",
             "                                "})
     @DisplayName("Falla el arranque cuando la clave JWT tiene menos de 32 bytes")
