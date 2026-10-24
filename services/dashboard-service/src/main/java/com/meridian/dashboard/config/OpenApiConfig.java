@@ -1,7 +1,7 @@
 package com.meridian.dashboard.config;
 
+import java.time.Instant;
 import java.util.List;
-import java.util.stream.Stream;
 
 import org.springdoc.core.models.GroupedOpenApi;
 import org.springframework.context.annotation.Bean;
@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.meridian.dashboard.dashboard.dto.DashboardResponse;
+import com.meridian.dashboard.dashboard.dto.SummaryResponse;
 import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 
 import io.swagger.v3.oas.models.Components;
@@ -60,7 +60,7 @@ public class OpenApiConfig {
 
     private Components sharedComponents() {
         return new Components()
-                .addExamples("DashboardMock", new Example()
+                .addExamples("SummaryMock", new Example()
                         .summary("Dashboard en modo mock")
                         .description("Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son "
                                 + "fixtures estáticas y no cotizaciones reales.")
@@ -72,17 +72,9 @@ public class OpenApiConfig {
     }
 
     private JsonNode mockDashboardExample() {
-        DashboardResponse response = new DashboardResponse(
-                DashboardMockFixtures.getDolar(),
-                DashboardMockFixtures.getFx(),
-                DashboardMockFixtures.getCrypto(),
-                Stream.concat(
-                        DashboardMockFixtures.getCryptoHistory("bitcoin").stream(),
-                        DashboardMockFixtures.getCryptoHistory("ethereum").stream()).toList(),
-                DashboardMockFixtures.getEquities(),
-                DashboardMockFixtures.getEquityCandles(),
-                DashboardMockFixtures.getNews(),
-                List.of());
+        SummaryResponse response = new SummaryResponse("Meridian", Instant.parse("2026-10-22T10:05:00Z"),
+                DashboardMockFixtures.getSummaryFx(), DashboardMockFixtures.getSummaryCrypto(),
+                DashboardMockFixtures.getSummaryEquities(), List.of());
         return OBJECT_MAPPER.valueToTree(response);
     }
 

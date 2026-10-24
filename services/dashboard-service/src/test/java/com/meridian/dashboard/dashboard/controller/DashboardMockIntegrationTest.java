@@ -36,15 +36,11 @@ class DashboardMockIntegrationTest {
     @Test
     @DisplayName("Devuelve fixtures de todas las secciones sin utilizar clientes HTTP")
     void devuelveFixturesSinHttp() throws Exception {
-        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
+        mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dolar").isNotEmpty())
                 .andExpect(jsonPath("$.fx").isNotEmpty())
                 .andExpect(jsonPath("$.crypto").isNotEmpty())
-                .andExpect(jsonPath("$.cryptoHistory.length()").value(16))
                 .andExpect(jsonPath("$.equities").isNotEmpty())
-                .andExpect(jsonPath("$.equityCandles").isNotEmpty())
-                .andExpect(jsonPath("$.news").isNotEmpty())
                 .andExpect(jsonPath("$.degraded").isEmpty());
         verifyNoInteractions(dolarClient, fxClient, cryptoClient, equityClient, newsClient, hnClient);
     }
