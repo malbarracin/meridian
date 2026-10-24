@@ -21,6 +21,19 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class GlobalExceptionHandler {
 
+    /** Rechaza credenciales sin exponer el motivo criptográfico. */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException exception) {
+        return build(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    /** Identifica parámetros fuera del catálogo soportado. */
+    @ExceptionHandler(UnsupportedParameterException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedParameter(UnsupportedParameterException exception) {
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, exception.getMessage(),
+                List.of(new FieldError(exception.getField(), "valor no soportado")));
+    }
+
     /** Devuelve los campos rechazados por la validación del cuerpo. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException exception) {
