@@ -62,6 +62,26 @@ class ErrorContractHttpTest {
     }
 
     @Test
+    @DisplayName("Traduce credenciales inválidas a 401 UNAUTHORIZED")
+    void mapsUnauthorized() throws Exception {
+        expectErrorBody(mockMvc.perform(get("/error/unauthorized")), 401, "UNAUTHORIZED",
+                "Credenciales inválidas");
+    }
+
+    @Test
+    @DisplayName("Traduce parámetro no soportado a 400 VALIDATION_ERROR con detalle de campo")
+    void mapsUnsupportedParameter() throws Exception {
+        mockMvc.perform(get("/error/unsupported"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("La solicitud tiene datos inválidos"))
+                .andExpect(jsonPath("$.details").isArray())
+                .andExpect(jsonPath("$.details[0].field").value("asset"))
+                .andExpect(jsonPath("$.details[0].message").value("valor no soportado"))
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+    }
+
+    @Test
     @DisplayName("Rechaza parámetros ausentes, tipos inválidos y argumentos inválidos")
     void rejectsBadRequests() throws Exception {
         expectBadRequest(mockMvc.perform(get("/error/parameter")));
@@ -136,6 +156,16 @@ class ErrorContractHttpTest {
         String conflict() {
             throw new ConflictException("El recurso ya existe") {
             };
+        }
+
+        @GetMapping("/error/unauthorized")
+        String unauthorized() {
+            throw new UnauthorizedException();
+        }
+
+        @GetMapping("/error/unsupported")
+        String unsupported() {
+            throw new UnsupportedParameterException("asset");
         }
 
         @GetMapping("/error/argument")

@@ -21,16 +21,19 @@ class JwtAuthInterceptorTest {
     @Test
     @DisplayName("Rechaza header ausente, esquema incorrecto y tokens inválidos o expirados")
     void rejectsInvalidCredentials() {
-        var request = new MockHttpServletRequest();
-        var response = new MockHttpServletResponse();
-        assertThatThrownBy(() -> interceptor.preHandle(request, response, this))
-                .isInstanceOf(UnauthorizedException.class);
+        assertUnauthorized(new MockHttpServletRequest());
         for (String header : new String[]{"Basic abc", "Bearer ", "Bearer invalid",
                 "Bearer " + JwtValidatorTest.token(JwtValidatorTest.SECRET, Instant.now().minusSeconds(300))}) {
+            var request = new MockHttpServletRequest();
             request.addHeader("Authorization", header);
-            assertThatThrownBy(() -> interceptor.preHandle(request, response, this))
-                    .isInstanceOf(UnauthorizedException.class).hasMessage("Credenciales inválidas");
+            assertUnauthorized(request);
         }
+    }
+
+    private void assertUnauthorized(MockHttpServletRequest request) {
+        assertThatThrownBy(() -> interceptor.preHandle(request, new MockHttpServletResponse(), this))
+                .isInstanceOf(UnauthorizedException.class)
+                .hasMessage("Credenciales inválidas");
     }
 
     @Test
