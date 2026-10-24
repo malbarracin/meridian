@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,6 +63,12 @@ public class GlobalExceptionHandler {
     }
 
     /** Informa de la ausencia de un recurso. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRoute(NoResourceFoundException exception) {
+        return build(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Recurso no encontrado", List.of());
+    }
+
+    /** Informa de la ausencia de un recurso de dominio. */
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException exception) {
         return build(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, exception.getMessage(), List.of());

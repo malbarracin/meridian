@@ -1,14 +1,12 @@
 # dashboard-service — datos públicos del dashboard
 
-Servicio REST que agrega en una sola respuesta las cotizaciones de dólar oficial y blue, los tipos de
-cambio USD→EUR/BRL, los precios e histórico de criptomonedas, las quotes y velas de bolsa y las noticias
-de IA/tecnología. Lo consume el frontend del dashboard de Meridian; no persiste datos: consulta proveedores
-externos, cachea en memoria y degrada las secciones que fallan sin cortar la respuesta.
+Servicio REST de mercados de Meridian. El resumen protegido por JWT agrega dólar ARS, cripto y bolsa
+con caché en memoria y degradación independiente por sección. Los adapters de históricos, noticias y
+Frankfurter se conservan para otros casos de uso; no se consultan desde summary.
 
 ## Funcionalidades
 
-- `GET /api/v1/dashboard`: devuelve todas las secciones agregadas (dólar, FX, cripto, histórico, bolsa,
-  velas y noticias) y la lista `degraded` con las secciones sin datos frescos.
+- `GET /api/v1/dashboard/summary`: devuelve dólar ARS, cripto y bolsa con JWT y lista `degraded`.
 - `GET /actuator/health` y `GET /actuator/info`: estado y metadatos del servicio.
 - Swagger UI y OpenAPI: contrato interactivo en `/swagger-ui.html` y `/v3/api-docs`.
 - Modo mock (`DASHBOARD_USE_MOCK=true`): fixtures estáticas sin llamadas externas, para desarrollo y QA.
@@ -29,7 +27,7 @@ externos, cachea en memoria y degrada las secciones que fallan sin cortar la res
 
 - JDK 21 (`java -version`).
 - Acceso a internet solo para el modo con proveedores reales.
-- No requiere Docker, base de datos ni variables obligatorias para arrancar.
+- Requiere `JWT_SECRET` con el mismo valor que auth-service (al menos 32 bytes); no requiere base de datos.
 
 ## Cómo correrlo
 
@@ -54,7 +52,7 @@ Con el servicio arriba:
 
 ```powershell
 Invoke-RestMethod http://localhost:8081/actuator/health
-Invoke-RestMethod http://localhost:8081/api/v1/dashboard
+Invoke-RestMethod http://localhost:8081/api/v1/dashboard/summary -Headers @{Authorization="Bearer <JWT>"}
 ```
 
 El puerto se cambia con `PORT` (por ejemplo `$env:PORT = '9090'`). Si se cambia el puerto, ajustar
@@ -119,12 +117,12 @@ evidencia; SPY se conserva como ETF de referencia. Los tests usan MockWebServer 
 
 | Método | Ruta | Qué hace | Respuestas |
 |---|---|---|---|
-| GET | `/api/v1/dashboard` | Agrega todas las secciones del dashboard | `200` `DashboardResponse`, `500` `ErrorResponse` |
+| GET | `/api/v1/dashboard/summary` | Resumen protegido por JWT | `200` `SummaryResponse`, `401` `ErrorResponse`, `500` `ErrorResponse` |
 | GET | `/actuator/health` | Estado del servicio | `200` `{"status":"UP"}` |
 | GET | `/actuator/info` | Metadatos de la aplicación | `200` |
 
 ```bash
-curl.exe -i http://localhost:8081/api/v1/dashboard
+curl.exe -i -H "Authorization: Bearer <JWT>" http://localhost:8081/api/v1/dashboard/summary
 ```
 
 Con el servicio en modo mock la respuesta usa fixtures; con proveedores reales cambian los valores y
@@ -132,52 +130,28 @@ Con el servicio en modo mock la respuesta usa fixtures; con proveedores reales c
 
 ```json
 {
-  "dolar": [
-    { "tipo": "oficial", "compra": 1000.00, "venta": 1040.00 },
-    { "tipo": "blue", "compra": 1200.00, "venta": 1220.00 }
-  ],
-  "fx": [
-    { "from": "USD", "to": "EUR", "rate": 0.92 },
-    { "from": "USD", "to": "BRL", "rate": 5.10 }
-  ],
-  "crypto": [
-    { "id": "bitcoin", "symbol": "BTC", "priceUsd": 67000, "change24h": 2.5 },
-    { "id": "ethereum", "symbol": "ETH", "priceUsd": 3500, "change24h": -1.2 }
-  ],
-  "cryptoHistory": [
-    { "timestamp": "2026-10-15T00:00:00Z", "priceUsd": 67000 }
-  ],
-  "equities": [
-    { "ticker": "AAPL", "price": 175.00, "currency": "USD" },
-    { "ticker": "MSFT", "price": 415.00, "currency": "USD" },
-    { "ticker": "SPY", "price": 450.00, "currency": "USD" }
-  ],
-  "equityCandles": [
-    {
-      "ticker": "AAPL",
-      "ohlcPoints": [
-        { "t": 1792627200, "o": 175.00, "h": 175.00, "l": 175.00, "c": 175.00, "v": 0 }
-      ]
-    }
-  ],
-  "news": [
-    {
-      "id": "demo-ai",
-      "title": "AI research demo",
-      "summary": "Static AI news fixture",
-      "source": "Meridian Demo",
-      "publishedAt": "2026-01-01T12:00:00Z",
-      "url": "https://example.com/demo-ai",
-      "topic": "ai-tech"
-    }
-  ],
+  "brand": "Meridian",
+  "generatedAt": "2026-10-22T10:05:00Z",
+  "fx": {"quotes": {
+    "usd_oficial": {"compra": 1000, "venta": 1040},
+    "usd_blue": {"compra": 1200, "venta": 1220}
+  }},
+  "crypto": {
+    "bitcoin": {"priceUsd": 67000, "change24hPct": 2.5},
+    "ethereum": {"priceUsd": 3500, "change24hPct": -1.2}
+  },
+  "equities": {
+    "AAPL": {"price": 175, "currency": "USD"},
+    "MSFT": {"price": 415, "currency": "USD"},
+    "SPY": {"price": 450, "currency": "USD"}
+  },
   "degraded": []
 }
 ```
 
-`degraded` contiene los nombres de sección (`dolar`, `fx`, `crypto`, `cryptoHistory`, `equities`,
-`equityCandles`, `news`). `cryptoHistory` se informa una sola vez aunque fallen BTC y ETH. Las listas
-pueden venir vacías si no hay datos ni caché previa; `null` no se devuelve.
+El campo público `fx` contiene dólar ARS de DolarApi, no FX internacional de Frankfurter.
+`degraded` solo contiene `fx`, `crypto` y `equities`. Se conserva el último dato stale ante
+fallos; sin caché previa, el mapa de la sección queda vacío.
 
 ### Errores
 
@@ -202,8 +176,8 @@ devolver `500 INTERNAL_ERROR` en un fallo inesperado de la orquestación:
 | 409 | `CONFLICT` | Conflicto de dominio (reservado) |
 | 500 | `INTERNAL_ERROR` | Fallo inesperado de la orquestación o del handler |
 
-El `GlobalExceptionHandler` mapea los cinco códigos; hoy `GET /api/v1/dashboard` no recibe body ni
-parámetros, por lo que en la práctica solo aplica `500`.
+El `GlobalExceptionHandler` mapea los cinco códigos; hoy `GET /api/v1/dashboard/summary` no recibe body ni
+parámetros, por lo que aplica `401` sin credenciales válidas y `500` ante fallos inesperados.
 
 ## Probar la API
 
@@ -252,7 +226,7 @@ com.meridian.dashboard
     ├── adapter/             # DolarApi, Frankfurter, CoinGecko, Finnhub, News/HN
     ├── mapper/              # MapStruct: respuestas de proveedor → DTO
     ├── mock/                # DashboardMockFixtures
-    └── dto/                 # DashboardResponse y DTOs de cada sección
+    └── dto/                 # SummaryResponse y DTOs de cada sección
 ```
 
 ## Documentación

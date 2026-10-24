@@ -13,27 +13,30 @@ tags:
 - name: Dashboard
   description: Datos públicos agregados de mercado y noticias
 paths:
-  /api/v1/dashboard:
+  /api/v1/dashboard/summary:
     get:
       tags:
       - Dashboard
       summary: Obtener el dashboard agregado
-      description: "Agrega cotizaciones de dólar y FX, precios e histórico de cripto,\
-        \ quotes y velas de bolsa y noticias de IA/tecnología. Con DASHBOARD_USE_MOCK=true\
-        \ devuelve fixtures estáticas sin llamadas externas. Los fallos de un proveedor\
-        \ no generan error HTTP: la sección se informa en degraded y se sirve cache\
-        \ o una lista vacía."
-      operationId: getDashboard
+      description: "Resumen de dólar ARS, criptomonedas y bolsa. Los fallos se informan\
+        \ en degraded."
+      operationId: getSummary
       responses:
+        "401":
+          description: "JWT ausente, inválido o expirado"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "200":
           description: Datos agregados del dashboard
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DashboardResponse"
+                $ref: "#/components/schemas/SummaryResponse"
               examples:
                 modoMock:
-                  $ref: "#/components/examples/DashboardMock"
+                  $ref: "#/components/examples/SummaryMock"
         "500":
           description: Error interno inesperado durante la orquestación
           content:
@@ -43,209 +46,10 @@ paths:
               examples:
                 errorInterno:
                   $ref: "#/components/examples/InternalError"
+      security:
+      - bearerAuth: []
 components:
   schemas:
-    DolarResponse:
-      type: object
-      description: Cotización de compra y venta de un tipo de dólar en ARS
-      properties:
-        tipo:
-          type: string
-          description: Tipo de dólar
-          example: oficial
-        compra:
-          type: number
-          description: Precio de compra en ARS
-          example: 1000.0
-        venta:
-          type: number
-          description: Precio de venta en ARS
-          example: 1040.0
-    FxRateResponse:
-      type: object
-      description: Tipo de cambio entre dos divisas
-      properties:
-        from:
-          type: string
-          description: Moneda origen (ISO 4217)
-          example: USD
-        to:
-          type: string
-          description: Moneda destino (ISO 4217)
-          example: EUR
-        rate:
-          type: number
-          description: Unidades de la moneda destino por una unidad de la origen
-          example: 0.92
-    CryptoResponse:
-      type: object
-      description: Precio actual y variación de las últimas 24 horas de una criptomoneda
-      properties:
-        id:
-          type: string
-          description: Identificador de la moneda en CoinGecko
-          example: bitcoin
-        symbol:
-          type: string
-          description: Símbolo de la moneda
-          example: BTC
-        priceUsd:
-          type: number
-          description: Precio actual en USD
-          example: 67000
-        change24h:
-          type: number
-          description: Variación porcentual de las últimas 24 horas
-          example: 2.5
-    CryptoPricePoint:
-      type: object
-      description: Punto de la serie histórica de una criptomoneda
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-          description: Fecha y hora UTC del punto
-          example: 2026-10-15T00:00:00Z
-        priceUsd:
-          type: number
-          description: Precio en USD en ese momento
-          example: 67000
-    EquityQuoteResponse:
-      type: object
-      description: Último precio de una acción o ETF
-      properties:
-        ticker:
-          type: string
-          description: Ticker del instrumento
-          example: AAPL
-        price:
-          type: number
-          description: Último precio
-          example: 175.0
-        currency:
-          type: string
-          description: Moneda del precio (ISO 4217)
-          example: USD
-    OhlcPoint:
-      type: object
-      description: Vela OHLC diaria expresada con timestamp Unix en segundos
-      properties:
-        t:
-          type: integer
-          format: int64
-          description: Timestamp Unix en segundos
-          example: 1792627200
-        o:
-          type: number
-          description: Precio de apertura
-          example: 175.0
-        h:
-          type: number
-          description: Precio máximo
-          example: 175.0
-        l:
-          type: number
-          description: Precio mínimo
-          example: 175.0
-        c:
-          type: number
-          description: Precio de cierre
-          example: 175.0
-        v:
-          type: number
-          description: Volumen negociado
-          example: 0
-    CandleResponse:
-      type: object
-      description: Serie OHLC diaria de un instrumento
-      properties:
-        ticker:
-          type: string
-          description: Ticker del instrumento
-          example: AAPL
-        ohlcPoints:
-          type: array
-          description: Velas diarias del rango consultado
-          items:
-            $ref: "#/components/schemas/OhlcPoint"
-    NewsArticleResponse:
-      type: object
-      description: Noticia de IA y tecnología normalizada
-      properties:
-        id:
-          type: string
-          description: Identificador de la noticia (URL en NewsAPI u objectID en HN)
-          example: demo-ai
-        title:
-          type: string
-          description: Título
-          example: AI research demo
-        summary:
-          type: string
-          description: Resumen o descripción
-          example: Static AI news fixture
-        source:
-          type: string
-          description: Fuente de la noticia
-          example: Meridian Demo
-        publishedAt:
-          type: string
-          format: date-time
-          description: Fecha de publicación en UTC
-          example: 2026-01-01T12:00:00Z
-        url:
-          type: string
-          description: URL del artículo
-          example: https://example.com/demo-ai
-        topic:
-          type: string
-          description: Tema de la noticia; siempre ai-tech
-          example: ai-tech
-    DashboardResponse:
-      type: object
-      description: Datos agregados de mercado y noticias para el dashboard
-      properties:
-        dolar:
-          type: array
-          description: Cotizaciones de dólar oficial y blue en ARS
-          items:
-            $ref: "#/components/schemas/DolarResponse"
-        fx:
-          type: array
-          description: Tipos de cambio internacionales USD→EUR y USD→BRL
-          items:
-            $ref: "#/components/schemas/FxRateResponse"
-        crypto:
-          type: array
-          description: Precio actual y variación 24h de BTC y ETH en USD
-          items:
-            $ref: "#/components/schemas/CryptoResponse"
-        cryptoHistory:
-          type: array
-          description: Serie de precios de los últimos 7 días de BTC y ETH
-          items:
-            $ref: "#/components/schemas/CryptoPricePoint"
-        equities:
-          type: array
-          description: "Últimos precios de AAPL, MSFT y SPY"
-          items:
-            $ref: "#/components/schemas/EquityQuoteResponse"
-        equityCandles:
-          type: array
-          description: Velas OHLC diarias por ticker
-          items:
-            $ref: "#/components/schemas/CandleResponse"
-        news:
-          type: array
-          description: Noticias de IA y tecnología normalizadas
-          items:
-            $ref: "#/components/schemas/NewsArticleResponse"
-        degraded:
-          type: array
-          description: Secciones sin datos frescos
-          items:
-            type: string
-            example: dolar
     ErrorResponse:
       type: object
       properties:
@@ -274,118 +78,89 @@ components:
           type: string
         message:
           type: string
+    CryptoQuote:
+      type: object
+      properties:
+        priceUsd:
+          type: number
+        change24hPct:
+          type: number
+    EquityQuote:
+      type: object
+      properties:
+        price:
+          type: number
+        currency:
+          type: string
+    FxSection:
+      type: object
+      properties:
+        quotes:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/RateQuote"
+    RateQuote:
+      type: object
+      properties:
+        compra:
+          type: number
+        venta:
+          type: number
+    SummaryResponse:
+      type: object
+      properties:
+        brand:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        fx:
+          $ref: "#/components/schemas/FxSection"
+        crypto:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/CryptoQuote"
+        equities:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/EquityQuote"
+        degraded:
+          type: array
+          items:
+            type: string
   examples:
-    DashboardMock:
+    SummaryMock:
       summary: Dashboard en modo mock
       description: Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son
         fixtures estáticas y no cotizaciones reales.
       value:
-        dolar:
-        - tipo: oficial
-          compra: 1000.0
-          venta: 1040.0
-        - tipo: blue
-          compra: 1200.0
-          venta: 1220.0
+        brand: Meridian
+        generatedAt: 2026-10-22T10:05:00Z
         fx:
-        - from: USD
-          to: EUR
-          rate: 0.92
-        - from: USD
-          to: BRL
-          rate: 5.1
+          quotes:
+            usd_blue:
+              compra: 1200.0
+              venta: 1220.0
+            usd_oficial:
+              compra: 1000.0
+              venta: 1040.0
         crypto:
-        - id: bitcoin
-          symbol: BTC
-          priceUsd: 67000.0
-          change24h: 2.5
-        - id: ethereum
-          symbol: ETH
-          priceUsd: 3500.0
-          change24h: -1.2
-        cryptoHistory:
-        - timestamp: 2026-10-15T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-16T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-17T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-18T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-19T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-20T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-21T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-22T00:00:00Z
-          priceUsd: 67000.0
-        - timestamp: 2026-10-15T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-16T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-17T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-18T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-19T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-20T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-21T00:00:00Z
-          priceUsd: 3500.0
-        - timestamp: 2026-10-22T00:00:00Z
-          priceUsd: 3500.0
+          ethereum:
+            priceUsd: 3500.0
+            change24hPct: -1.2
+          bitcoin:
+            priceUsd: 67000.0
+            change24hPct: 2.5
         equities:
-        - ticker: AAPL
-          price: 175
-          currency: USD
-        - ticker: MSFT
-          price: 415
-          currency: USD
-        - ticker: SPY
-          price: 450.0
-          currency: USD
-        equityCandles:
-        - ticker: AAPL
-          ohlcPoints:
-          - t: 1792627200
-            o: 175
-            h: 175
-            l: 175
-            c: 175
-            v: 0
-        - ticker: MSFT
-          ohlcPoints:
-          - t: 1792627200
-            o: 415
-            h: 415
-            l: 415
-            c: 415
-            v: 0
-        - ticker: SPY
-          ohlcPoints:
-          - t: 1792627200
-            o: 450.0
-            h: 450.0
-            l: 450.0
-            c: 450.0
-            v: 0
-        news:
-        - id: demo-ai
-          title: AI research demo
-          summary: Static AI news fixture
-          source: Meridian Demo
-          publishedAt: 2026-01-01T12:00:00Z
-          url: https://example.com/demo-ai
-          topic: ai-tech
-        - id: demo-tech
-          title: Technology demo
-          summary: Static technology news fixture
-          source: Meridian Demo
-          publishedAt: 2026-01-02T12:00:00Z
-          url: https://example.com/demo-tech
-          topic: ai-tech
+          MSFT:
+            price: 415
+            currency: USD
+          SPY:
+            price: 450.0
+            currency: USD
+          AAPL:
+            price: 175
+            currency: USD
         degraded: []
     InternalError:
       summary: Error interno
@@ -395,3 +170,8 @@ components:
         message: Error interno
         details: []
         timestamp: 2026-10-22T10:05:00Z
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

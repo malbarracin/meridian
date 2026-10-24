@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -40,15 +42,10 @@ class DashboardServiceTest {
     @BeforeEach
     void preparaServicio() {
         executor = Executors.newVirtualThreadPerTaskExecutor();
-        service = new DashboardService(dolar, fx, crypto, equities, news, new DashboardCacheService(60), executor);
+        service = new DashboardService(dolar, crypto, equities, new DashboardCacheService(60), executor);
         when(dolar.fetchDolar()).thenReturn(DashboardMockFixtures.getDolar());
-        when(fx.fetchFx()).thenReturn(DashboardMockFixtures.getFx());
         when(crypto.fetchPrices()).thenReturn(DashboardMockFixtures.getCrypto());
-        when(crypto.fetchHistory("bitcoin")).thenReturn(DashboardMockFixtures.getCryptoHistory("bitcoin"));
-        when(crypto.fetchHistory("ethereum")).thenReturn(DashboardMockFixtures.getCryptoHistory("ethereum"));
         when(equities.fetchQuotes()).thenReturn(DashboardMockFixtures.getEquities());
-        when(equities.fetchCandles()).thenReturn(DashboardMockFixtures.getEquityCandles());
-        when(news.fetchNews()).thenReturn(DashboardMockFixtures.getNews());
     }
 
     @AfterEach
@@ -59,74 +56,73 @@ class DashboardServiceTest {
     @Test
     @DisplayName("Agrega todos los adapters y reutiliza los datos en la segunda consulta")
     void agregaYReutilizaCache() {
-        var response = service.getDashboard();
+        var response = service.getSummary();
         assertThat(response.degraded()).isEmpty();
-        assertThat(response.dolar()).isEqualTo(DashboardMockFixtures.getDolar());
-        assertThat(response.fx()).isEqualTo(DashboardMockFixtures.getFx());
-        assertThat(response.crypto()).isEqualTo(DashboardMockFixtures.getCrypto());
-        assertThat(response.cryptoHistory()).hasSize(16);
-        assertThat(response.equities()).isEqualTo(DashboardMockFixtures.getEquities());
-        assertThat(response.equityCandles()).isEqualTo(DashboardMockFixtures.getEquityCandles());
-        assertThat(response.news()).isEqualTo(DashboardMockFixtures.getNews());
-        assertThat(service.getDashboard()).isEqualTo(response);
+        assertThat(response.fx()).isEqualTo(DashboardMockFixtures.getSummaryFx());
+        assertThat(response.brand()).isEqualTo("Meridian");
+        assertThat(response.generatedAt()).isNotNull();
+        assertThat(response.crypto()).isEqualTo(DashboardMockFixtures.getSummaryCrypto());
+        assertThat(response.equities()).isEqualTo(DashboardMockFixtures.getSummaryEquities());
+        assertThat(service.getSummary().fx()).isEqualTo(response.fx());
         verify(dolar).fetchDolar();
-        verify(fx).fetchFx();
+        org.mockito.Mockito.verifyNoInteractions(fx, news);
         verify(crypto).fetchPrices();
-        verify(crypto).fetchHistory("bitcoin");
-        verify(crypto).fetchHistory("ethereum");
         verify(equities).fetchQuotes();
-        verify(equities).fetchCandles();
-        verify(news).fetchNews();
+        org.mockito.Mockito.verifyNoMoreInteractions(crypto, equities);
     }
 
     @Test
     @DisplayName("Acumula degraded sin duplicados y conserva las otras secciones")
     void aislaFallos() {
         when(dolar.fetchDolar()).thenThrow(new IllegalStateException("offline"));
-        when(crypto.fetchHistory("bitcoin")).thenThrow(new IllegalStateException("offline"));
-        when(crypto.fetchHistory("ethereum")).thenThrow(new IllegalStateException("offline"));
-        when(news.fetchNews()).thenThrow(new IllegalStateException("offline"));
 
-        var response = service.getDashboard();
+        var response = service.getSummary();
 
-        assertThat(response.degraded()).containsExactly("dolar", "cryptoHistory", "news");
-        assertThat(response.dolar()).isEmpty();
-        assertThat(response.cryptoHistory()).isEmpty();
-        assertThat(response.news()).isEmpty();
-        assertThat(response.crypto()).isNotEmpty();
-        assertThat(response.equities()).isNotEmpty();
+        assertThat(response.degraded()).containsExactly("fx");
+        assertThat(response.fx().quotes()).isEmpty();
+        assertThat(response.crypto().values()).isNotEmpty();
+        assertThat(response.equities().values()).isNotEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"fx", "crypto", "equities"})
+    @DisplayName("Aísla cada proveedor caído sin perder las otras secciones")
+    void aislaCadaProveedor(String section) {
+        switch (section) {
+            case "fx" -> when(dolar.fetchDolar()).thenThrow(new IllegalStateException("timeout"));
+            case "crypto" -> when(crypto.fetchPrices()).thenThrow(new IllegalStateException("timeout"));
+            case "equities" -> when(equities.fetchQuotes()).thenThrow(new IllegalStateException("timeout"));
+            default -> throw new IllegalArgumentException(section);
+        }
+        var response = service.getSummary();
+        assertThat(response.degraded()).containsExactly(section);
+        assertThat(response.fx().quotes().isEmpty()).isEqualTo("fx".equals(section));
+        assertThat(response.crypto().values().isEmpty()).isEqualTo("crypto".equals(section));
+        assertThat(response.equities().values().isEmpty()).isEqualTo("equities".equals(section));
     }
 
     @Test
     @DisplayName("Conserva datos stale y marca degraded cuando falla la renovación")
     void marcaDegradedConDatosStale() {
-        service = new DashboardService(dolar, fx, crypto, equities, news, new DashboardCacheService(0), executor);
-        service.getDashboard();
+        service = new DashboardService(dolar, crypto, equities, new DashboardCacheService(0), executor);
+        service.getSummary();
         when(dolar.fetchDolar()).thenThrow(new IllegalStateException("offline"));
 
-        var response = service.getDashboard();
+        var response = service.getSummary();
 
-        assertThat(response.dolar()).isEqualTo(DashboardMockFixtures.getDolar());
-        assertThat(response.degraded()).containsExactly("dolar");
-        assertThat(response.news()).isEqualTo(DashboardMockFixtures.getNews());
+        assertThat(response.fx()).isEqualTo(DashboardMockFixtures.getSummaryFx());
+        assertThat(response.degraded()).containsExactly("fx");
     }
 
     @Test
-    @DisplayName("Inicia las ocho consultas antes de que termine ninguna")
+    @DisplayName("Inicia las tres consultas antes de que termine ninguna")
     void consultaEnParalelo() {
-        CountDownLatch started = new CountDownLatch(8);
+        CountDownLatch started = new CountDownLatch(3);
         when(dolar.fetchDolar()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getDolar()));
-        when(fx.fetchFx()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getFx()));
         when(crypto.fetchPrices()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getCrypto()));
-        when(crypto.fetchHistory("bitcoin")).thenAnswer(call ->
-                awaitAll(started, DashboardMockFixtures.getCryptoHistory("bitcoin")));
-        when(crypto.fetchHistory("ethereum")).thenAnswer(call ->
-                awaitAll(started, DashboardMockFixtures.getCryptoHistory("ethereum")));
         when(equities.fetchQuotes()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getEquities()));
-        when(equities.fetchCandles()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getEquityCandles()));
-        when(news.fetchNews()).thenAnswer(call -> awaitAll(started, DashboardMockFixtures.getNews()));
 
-        assertThat(service.getDashboard().degraded()).isEmpty();
+        assertThat(service.getSummary().degraded()).isEmpty();
         assertThat(started.getCount()).isZero();
     }
 

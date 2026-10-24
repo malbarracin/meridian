@@ -3,16 +3,23 @@ package com.meridian.dashboard.dashboard.mock;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import com.meridian.dashboard.dashboard.dto.CandleResponse;
 import com.meridian.dashboard.dashboard.dto.CryptoPricePoint;
+import com.meridian.dashboard.dashboard.dto.CryptoQuote;
 import com.meridian.dashboard.dashboard.dto.CryptoResponse;
+import com.meridian.dashboard.dashboard.dto.CryptoSection;
 import com.meridian.dashboard.dashboard.dto.DolarResponse;
+import com.meridian.dashboard.dashboard.dto.EquitiesSection;
+import com.meridian.dashboard.dashboard.dto.EquityQuote;
 import com.meridian.dashboard.dashboard.dto.EquityQuoteResponse;
 import com.meridian.dashboard.dashboard.dto.FxRateResponse;
+import com.meridian.dashboard.dashboard.dto.FxSection;
 import com.meridian.dashboard.dashboard.dto.NewsArticleResponse;
 import com.meridian.dashboard.dashboard.dto.OhlcPoint;
+import com.meridian.dashboard.dashboard.dto.RateQuote;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -29,6 +36,24 @@ public final class DashboardMockFixtures {
         return List.of(
                 new CryptoResponse("bitcoin", "BTC", new BigDecimal("67000"), new BigDecimal("2.5")),
                 new CryptoResponse("ethereum", "ETH", new BigDecimal("3500"), new BigDecimal("-1.2")));
+    }
+
+    /** Cotizaciones públicas de dólar ARS. */
+    public static FxSection getSummaryFx() {
+        return new FxSection(getDolar().stream().collect(Collectors.toMap(
+                quote -> "usd_" + quote.tipo(), quote -> new RateQuote(quote.compra(), quote.venta()))));
+    }
+
+    /** Precios públicos de criptomonedas. */
+    public static CryptoSection getSummaryCrypto() {
+        return new CryptoSection(getCrypto().stream().collect(Collectors.toMap(
+                quote -> quote.id(), quote -> new CryptoQuote(quote.priceUsd(), quote.change24h()))));
+    }
+
+    /** Cotizaciones públicas de bolsa. */
+    public static EquitiesSection getSummaryEquities() {
+        return new EquitiesSection(getEquities().stream().collect(Collectors.toMap(
+                quote -> quote.ticker(), quote -> new EquityQuote(quote.price(), quote.currency()))));
     }
 
     /** Serie diaria fija de BTC, mantenida como fixture por defecto. */
