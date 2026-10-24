@@ -38,8 +38,8 @@ class DashboardControllerTest {
     @MockitoBean private ChartsService chartsService;
 
     @Test
-    @DisplayName("Charts devuelve puntos y requiere JWT")
-    void devuelveChartsConJwt() throws Exception {
+    @DisplayName("Charts BTC con JWT válido responde 200 con serie de 7d")
+    void devuelveChartsBtcConJwt() throws Exception {
         when(chartsService.getCharts("BTC", "7d")).thenReturn(
                 new ChartsResponse("BTC", "7d",
                         DashboardMockFixtures.getChartPoints("BTC"), false));
@@ -51,10 +51,54 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.range").value("7d"))
                 .andExpect(jsonPath("$.points[0].t").isNotEmpty())
                 .andExpect(jsonPath("$.points[0].v").isNumber())
+                .andExpect(jsonPath("$.points.length()").value(8))
                 .andExpect(jsonPath("$.degraded").value(false));
+    }
+
+    @Test
+    @DisplayName("Charts AAPL con JWT válido responde 200 con puntos graficables")
+    void devuelveChartsEquityConJwt() throws Exception {
+        when(chartsService.getCharts("AAPL", "7d")).thenReturn(
+                new ChartsResponse("AAPL", "7d",
+                        DashboardMockFixtures.getChartPoints("AAPL"), false));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "AAPL").param("range", "7d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value("AAPL"))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.points").isArray())
+                .andExpect(jsonPath("$.points[0].t").isNotEmpty())
+                .andExpect(jsonPath("$.points[0].v").isNumber())
+                .andExpect(jsonPath("$.degraded").value(false));
+    }
+
+    @Test
+    @DisplayName("Charts sin JWT válido responde 401 con contrato UNAUTHORIZED")
+    void rechazaChartsSinJwt() throws Exception {
         mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC")
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        org.mockito.Mockito.verifyNoInteractions(chartsService);
+    }
+
+    @Test
+    @DisplayName("Charts con proveedor degradado responde 200 y degraded true")
+    void devuelveChartsDegraded() throws Exception {
+        when(chartsService.getCharts("ETH", "7d")).thenReturn(
+                new ChartsResponse("ETH", "7d", List.of(), true));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "ETH").param("range", "7d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value("ETH"))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.degraded").value(true))
+                .andExpect(jsonPath("$.points").isArray());
     }
 
     @Test
@@ -69,7 +113,9 @@ class DashboardControllerTest {
                         .header("Authorization", bearerToken()))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
                 .andExpect(jsonPath("$.details[0].field").value("asset"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
                 .andExpect(jsonPath("$.timestamp").isNotEmpty());
         mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC").param("range", "30d")
                         .header("Authorization", bearerToken()))
