@@ -257,6 +257,7 @@ components:
           - NOT_FOUND
           - CONFLICT
           - INTERNAL_ERROR
+          - UNAUTHORIZED
         message:
           type: string
         details:

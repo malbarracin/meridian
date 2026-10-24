@@ -19,6 +19,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("Dashboard offline completo")
 class DashboardMockIntegrationTest {
 
+    private static String bearerToken() {
+        return "Bearer " + com.meridian.dashboard.security.JwtValidatorTest.token(
+                com.meridian.dashboard.security.JwtValidatorTest.SECRET,
+                java.time.Instant.now().plusSeconds(300));
+    }
+
     @Autowired private MockMvc mockMvc;
     @MockitoBean(name = "dolarApiWebClient") private WebClient dolarClient;
     @MockitoBean(name = "frankfurterWebClient") private WebClient fxClient;
@@ -30,7 +36,7 @@ class DashboardMockIntegrationTest {
     @Test
     @DisplayName("Devuelve fixtures de todas las secciones sin utilizar clientes HTTP")
     void devuelveFixturesSinHttp() throws Exception {
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.dolar").isNotEmpty())
                 .andExpect(jsonPath("$.fx").isNotEmpty())

@@ -22,6 +22,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("Endpoint del dashboard")
 class DashboardControllerTest {
 
+    private static String bearerToken() {
+        return "Bearer " + com.meridian.dashboard.security.JwtValidatorTest.token(
+                com.meridian.dashboard.security.JwtValidatorTest.SECRET,
+                java.time.Instant.now().plusSeconds(300));
+    }
+
     @Autowired private MockMvc mockMvc;
     @MockitoBean private DashboardService service;
 
@@ -34,7 +40,7 @@ class DashboardControllerTest {
                 DashboardMockFixtures.getEquities(), DashboardMockFixtures.getEquityCandles(),
                 DashboardMockFixtures.getNews(), List.of()));
 
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.dolar[0].tipo").value("oficial"))
                 .andExpect(jsonPath("$.fx").isNotEmpty())
@@ -53,7 +59,7 @@ class DashboardControllerTest {
                 List.of(), DashboardMockFixtures.getFx(), DashboardMockFixtures.getCrypto(),
                 List.of(), List.of(), List.of(), List.of(), List.of("dolar", "news")));
 
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.dolar").isEmpty())
                 .andExpect(jsonPath("$.crypto").isNotEmpty())
@@ -65,7 +71,7 @@ class DashboardControllerTest {
     @DisplayName("El handler oculta errores inesperados de orquestación")
     void manejaErrorInesperado() throws Exception {
         when(service.getDashboard()).thenThrow(new IllegalStateException("secret"));
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.details").isEmpty())
