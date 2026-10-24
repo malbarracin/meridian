@@ -13,6 +13,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +22,16 @@ import lombok.extern.slf4j.Slf4j;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /** Devuelve los parámetros rechazados por las restricciones del endpoint. */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleMethodValidation(HandlerMethodValidationException exception) {
+        List<FieldError> details = exception.getParameterValidationResults().stream()
+                .map(result -> new FieldError(result.getMethodParameter().getParameterName(), "valor no soportado"))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
+                "La solicitud tiene datos inválidos", details);
+    }
 
     /** Rechaza credenciales sin exponer el motivo criptográfico. */
     @ExceptionHandler(UnauthorizedException.class)

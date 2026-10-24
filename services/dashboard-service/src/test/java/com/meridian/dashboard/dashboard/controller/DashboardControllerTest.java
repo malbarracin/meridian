@@ -10,12 +10,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.meridian.dashboard.dashboard.dto.FxSection;
 import com.meridian.dashboard.dashboard.dto.ChartsResponse;
+import com.meridian.dashboard.dashboard.dto.FxSection;
+import com.meridian.dashboard.dashboard.dto.NewsResponse;
 import com.meridian.dashboard.dashboard.dto.SummaryResponse;
 import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
-import com.meridian.dashboard.dashboard.service.DashboardService;
 import com.meridian.dashboard.dashboard.service.ChartsService;
+import com.meridian.dashboard.dashboard.service.DashboardService;
+import com.meridian.dashboard.dashboard.service.NewsService;
 import com.meridian.dashboard.exception.UnsupportedParameterException;
 
 import static org.mockito.Mockito.when;
@@ -35,7 +37,53 @@ class DashboardControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private DashboardService service;
+    @MockitoBean private NewsService newsService;
     @MockitoBean private ChartsService chartsService;
+
+    @Test
+    @DisplayName("Noticias devuelve los campos normalizados con JWT")
+    void devuelveNoticias() throws Exception {
+        when(newsService.getNews("ai-tech", 8)).thenReturn(
+                new NewsResponse(DashboardMockFixtures.getNews(), false));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                        .param("topic", "ai-tech").param("limit", "8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].title").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].summary").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].source").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].publishedAt").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].url").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].topic").value("ai-tech"))
+                .andExpect(jsonPath("$.degraded").value(false));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Noticias exige JWT y rechaza parámetros inválidos con contrato estándar")
+    void rechazaNoticiasInvalidas() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/news"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        when(newsService.getNews("sports", 8)).thenThrow(
+                new UnsupportedParameterException("topic"));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                        .param("topic", "sports"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("topic"));
+        for (String limit : List.of("0", "9", "-1")) {
+            mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                            .param("limit", limit))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.details[0].field").value("limit"))
+                    .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        }
+    }
 
     @Test
     @DisplayName("Charts BTC con JWT válido responde 200 con serie de 7d")

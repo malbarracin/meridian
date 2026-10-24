@@ -54,6 +54,14 @@ class OpenApiExportTest {
         Files.writeString(OUTPUT_DIRECTORY.resolve("openapi.yaml"), yaml, StandardCharsets.UTF_8);
 
         JsonNode paths = specification.path("paths");
+        JsonNode news = paths.path("/api/v1/dashboard/news").path("get");
+        assertThat(news.path("security").get(0).has("bearerAuth")).isTrue();
+        assertThat(news.path("responses").has("200")).isTrue();
+        assertThat(news.path("responses").has("400")).isTrue();
+        assertThat(news.path("responses").has("401")).isTrue();
+        assertThat(news.path("parameters")).hasSize(2);
+        assertThat(specification.path("components").path("examples").has("NewsMock")).isTrue();
+        assertThat(specification.path("components").path("schemas").has("NewsResponse")).isTrue();
         JsonNode charts = paths.path("/api/v1/dashboard/charts").path("get");
         assertThat(charts.path("security").get(0).has("bearerAuth")).isTrue();
         assertThat(charts.path("responses").has("200")).isTrue();
