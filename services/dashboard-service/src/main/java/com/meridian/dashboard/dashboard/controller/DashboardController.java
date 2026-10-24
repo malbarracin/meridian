@@ -3,13 +3,17 @@ package com.meridian.dashboard.dashboard.controller;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.meridian.dashboard.dashboard.dto.SummaryResponse;
+import com.meridian.dashboard.dashboard.dto.ChartsResponse;
+import com.meridian.dashboard.dashboard.service.ChartsService;
 import com.meridian.dashboard.dashboard.service.DashboardService;
 import com.meridian.dashboard.exception.ErrorResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -34,6 +38,33 @@ import lombok.RequiredArgsConstructor;
 public class DashboardController {
 
     private final DashboardService dashboardService;
+    private final ChartsService chartsService;
+
+    /**
+     * @param asset activo soportado obligatorio
+     * @param range ventana opcional, únicamente 7d
+     * @return serie histórica en USD y estado de degradación del proveedor
+     */
+    @GetMapping("/charts")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Obtener la serie histórica de un activo",
+            description = "Últimos siete días; si falla el proveedor devuelve datos stale o puntos vacíos.")
+    @ApiResponse(responseCode = "200", description = "Serie histórica disponible",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ChartsResponse.class),
+                    examples = @ExampleObject(name = "modoMock", ref = "#/components/examples/ChartsMock")))
+    @ApiResponse(responseCode = "400", description = "Activo o rango no soportado",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "JWT ausente, inválido o expirado",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public ChartsResponse getCharts(
+            @Parameter(description = "Activo soportado", required = true,
+                    schema = @Schema(allowableValues = {"BTC", "ETH", "AAPL", "MSFT", "SPY"}))
+            @RequestParam(name = "asset") String asset,
+            @Parameter(description = "Ventana histórica", schema = @Schema(allowableValues = "7d"))
+            @RequestParam(name = "range", required = false) String range) {
+        return chartsService.getCharts(asset, range);
+    }
 
     /**
      * Devuelve las tres secciones del resumen en una sola respuesta.
