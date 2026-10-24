@@ -66,6 +66,73 @@
           "bearerAuth" : [ ]
         } ]
       }
+    },
+    "/api/v1/dashboard/charts" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "summary" : "Obtener la serie histórica de un activo",
+        "description" : "Últimos siete días; si falla el proveedor devuelve datos stale o puntos vacíos.",
+        "operationId" : "getCharts",
+        "parameters" : [ {
+          "name" : "asset",
+          "in" : "query",
+          "description" : "Activo soportado",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "BTC", "ETH", "AAPL", "MSFT", "SPY" ]
+          }
+        }, {
+          "name" : "range",
+          "in" : "query",
+          "description" : "Ventana histórica",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "7d" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Serie histórica disponible",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ChartsResponse"
+                },
+                "examples" : {
+                  "modoMock" : {
+                    "$ref" : "#/components/examples/ChartsMock"
+                  }
+                }
+              }
+            }
+          },
+          "400" : {
+            "description" : "Activo o rango no soportado",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "JWT ausente, inválido o expirado",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
     }
   },
   "components" : {
@@ -179,9 +246,85 @@
             }
           }
         }
+      },
+      "ChartPoint" : {
+        "type" : "object",
+        "properties" : {
+          "t" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Fecha UTC",
+            "example" : "2026-10-22T00:00:00Z"
+          },
+          "v" : {
+            "type" : "number",
+            "description" : "Precio en USD",
+            "example" : 67000
+          }
+        }
+      },
+      "ChartsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "asset" : {
+            "type" : "string",
+            "description" : "Activo normalizado",
+            "example" : "BTC"
+          },
+          "range" : {
+            "type" : "string",
+            "description" : "Ventana histórica",
+            "example" : "7d"
+          },
+          "points" : {
+            "type" : "array",
+            "description" : "Puntos ordenados por fecha",
+            "items" : {
+              "$ref" : "#/components/schemas/ChartPoint"
+            }
+          },
+          "degraded" : {
+            "type" : "boolean",
+            "description" : "Fallo del proveedor sin caché fresca",
+            "example" : false
+          }
+        }
       }
     },
     "examples" : {
+      "ChartsMock" : {
+        "summary" : "Serie BTC en modo mock",
+        "value" : {
+          "asset" : "BTC",
+          "range" : "7d",
+          "points" : [ {
+            "t" : "2026-10-15T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-16T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-17T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-18T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-19T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-20T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-21T00:00:00Z",
+            "v" : 67000.0
+          }, {
+            "t" : "2026-10-22T00:00:00Z",
+            "v" : 67000.0
+          } ],
+          "degraded" : false
+        }
+      },
       "SummaryMock" : {
         "summary" : "Dashboard en modo mock",
         "description" : "Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son fixtures estáticas y no cotizaciones reales.",
@@ -190,33 +333,33 @@
           "generatedAt" : "2026-10-22T10:05:00Z",
           "fx" : {
             "quotes" : {
-              "usd_blue" : {
-                "compra" : 1200.0,
-                "venta" : 1220.0
-              },
               "usd_oficial" : {
                 "compra" : 1000.0,
                 "venta" : 1040.0
+              },
+              "usd_blue" : {
+                "compra" : 1200.0,
+                "venta" : 1220.0
               }
             }
           },
           "crypto" : {
-            "ethereum" : {
-              "priceUsd" : 3500.0,
-              "change24hPct" : -1.2
-            },
             "bitcoin" : {
               "priceUsd" : 67000.0,
               "change24hPct" : 2.5
+            },
+            "ethereum" : {
+              "priceUsd" : 3500.0,
+              "change24hPct" : -1.2
             }
           },
           "equities" : {
-            "MSFT" : {
-              "price" : 415,
-              "currency" : "USD"
-            },
             "SPY" : {
               "price" : 450.0,
+              "currency" : "USD"
+            },
+            "MSFT" : {
+              "price" : 415,
               "currency" : "USD"
             },
             "AAPL" : {

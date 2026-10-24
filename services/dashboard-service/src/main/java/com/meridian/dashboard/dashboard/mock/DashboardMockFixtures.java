@@ -7,6 +7,8 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import com.meridian.dashboard.dashboard.dto.CandleResponse;
+import com.meridian.dashboard.dashboard.dto.ChartPoint;
+import com.meridian.dashboard.dashboard.service.SupportedAsset;
 import com.meridian.dashboard.dashboard.dto.CryptoPricePoint;
 import com.meridian.dashboard.dashboard.dto.CryptoQuote;
 import com.meridian.dashboard.dashboard.dto.CryptoResponse;
@@ -31,6 +33,18 @@ public final class DashboardMockFixtures {
     private static final Instant HISTORY_START = Instant.parse("2026-10-15T00:00:00Z");
     private static final int DAYS = 7;
     private static final long SECONDS_PER_DAY = 86400;
+
+    /** Serie pública estática por activo para ejemplos del contrato. */
+    public static List<ChartPoint> getChartPoints(String asset) {
+        SupportedAsset supported = SupportedAsset.valueOf(asset);
+        if (supported.isCrypto()) {
+            return getCryptoHistory(supported.getSymbol()).stream()
+                    .map(point -> new ChartPoint(point.timestamp(), point.priceUsd())).toList();
+        }
+        return getEquityCandles().stream().filter(series -> series.ticker().equals(asset))
+                .flatMap(series -> series.ohlcPoints().stream())
+                .map(point -> new ChartPoint(Instant.ofEpochSecond(point.t()), point.c())).toList();
+    }
 
     public static List<CryptoResponse> getCrypto() {
         return List.of(
