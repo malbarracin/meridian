@@ -503,12 +503,12 @@
             }
           },
           "equities" : {
-            "SPY" : {
-              "price" : 450.0,
-              "currency" : "USD"
-            },
             "AAPL" : {
               "price" : 175,
+              "currency" : "USD"
+            },
+            "SPY" : {
+              "price" : 450.0,
               "currency" : "USD"
             },
             "MSFT" : {

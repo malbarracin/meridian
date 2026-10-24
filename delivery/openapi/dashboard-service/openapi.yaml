@@ -372,11 +372,11 @@ components:
             priceUsd: 67000.0
             change24hPct: 2.5
         equities:
-          SPY:
-            price: 450.0
-            currency: USD
           AAPL:
             price: 175
+            currency: USD
+          SPY:
+            price: 450.0
             currency: USD
           MSFT:
             price: 415
