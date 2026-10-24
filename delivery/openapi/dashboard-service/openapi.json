@@ -66,6 +66,72 @@
           "bearerAuth" : [ ]
         } ]
       }
+    },
+    "/api/v1/dashboard/news" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "summary" : "Obtener noticias IA/tecnología",
+        "description" : "El fallback HN es normal. degraded solo indica el fallo de ambas fuentes.",
+        "operationId" : "getNews",
+        "parameters" : [ {
+          "name" : "topic",
+          "in" : "query",
+          "description" : "Único tópico soportado",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "ai-tech" ]
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "description" : "Máximo de artículos",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "default" : 8,
+            "maximum" : 8,
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "Noticias disponibles, frescas o stale",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/NewsResponse"
+                },
+                "example" : null
+              }
+            }
+          },
+          "400" : {
+            "description" : "Tópico o límite inválido",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401" : {
+            "description" : "JWT ausente, inválido o expirado",
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security" : [ {
+          "bearerAuth" : [ ]
+        } ]
+      }
     }
   },
   "components" : {
@@ -179,9 +245,88 @@
             }
           }
         }
+      },
+      "NewsArticleResponse" : {
+        "type" : "object",
+        "description" : "Noticia de IA y tecnología normalizada",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "description" : "Identificador de la noticia (URL en NewsAPI u objectID en HN)",
+            "example" : "demo-ai"
+          },
+          "title" : {
+            "type" : "string",
+            "description" : "Título",
+            "example" : "AI research demo"
+          },
+          "summary" : {
+            "type" : "string",
+            "description" : "Resumen o descripción",
+            "example" : "Static AI news fixture"
+          },
+          "source" : {
+            "type" : "string",
+            "description" : "Fuente de la noticia",
+            "example" : "Meridian Demo"
+          },
+          "publishedAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Fecha de publicación en UTC",
+            "example" : "2026-01-01T12:00:00Z"
+          },
+          "url" : {
+            "type" : "string",
+            "description" : "URL del artículo",
+            "example" : "https://example.com/demo-ai"
+          },
+          "topic" : {
+            "type" : "string",
+            "description" : "Tema de la noticia; siempre ai-tech",
+            "example" : "ai-tech"
+          }
+        }
+      },
+      "NewsResponse" : {
+        "type" : "object",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/NewsArticleResponse"
+            }
+          },
+          "degraded" : {
+            "type" : "boolean"
+          }
+        }
       }
     },
     "examples" : {
+      "NewsMock" : {
+        "summary" : "Noticias en modo mock",
+        "value" : {
+          "items" : [ {
+            "id" : "demo-ai",
+            "title" : "AI research demo",
+            "summary" : "Static AI news fixture",
+            "source" : "Meridian Demo",
+            "publishedAt" : "2026-01-01T12:00:00Z",
+            "url" : "https://example.com/demo-ai",
+            "topic" : "ai-tech"
+          }, {
+            "id" : "demo-tech",
+            "title" : "Technology demo",
+            "summary" : "Static technology news fixture",
+            "source" : "Meridian Demo",
+            "publishedAt" : "2026-01-02T12:00:00Z",
+            "url" : "https://example.com/demo-tech",
+            "topic" : "ai-tech"
+          } ],
+          "degraded" : false
+        }
+      },
       "SummaryMock" : {
         "summary" : "Dashboard en modo mock",
         "description" : "Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son fixtures estáticas y no cotizaciones reales.",
@@ -190,24 +335,24 @@
           "generatedAt" : "2026-10-22T10:05:00Z",
           "fx" : {
             "quotes" : {
-              "usd_blue" : {
-                "compra" : 1200.0,
-                "venta" : 1220.0
-              },
               "usd_oficial" : {
                 "compra" : 1000.0,
                 "venta" : 1040.0
+              },
+              "usd_blue" : {
+                "compra" : 1200.0,
+                "venta" : 1220.0
               }
             }
           },
           "crypto" : {
-            "ethereum" : {
-              "priceUsd" : 3500.0,
-              "change24hPct" : -1.2
-            },
             "bitcoin" : {
               "priceUsd" : 67000.0,
               "change24hPct" : 2.5
+            },
+            "ethereum" : {
+              "priceUsd" : 3500.0,
+              "change24hPct" : -1.2
             }
           },
           "equities" : {
@@ -215,12 +360,12 @@
               "price" : 415,
               "currency" : "USD"
             },
-            "SPY" : {
-              "price" : 450.0,
-              "currency" : "USD"
-            },
             "AAPL" : {
               "price" : 175,
+              "currency" : "USD"
+            },
+            "SPY" : {
+              "price" : 450.0,
               "currency" : "USD"
             }
           },
