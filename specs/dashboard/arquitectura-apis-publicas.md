@@ -1,15 +1,51 @@
 ---
-title: "Dashboard Service — Arquitectura (H8): Catálogo de APIs públicas"
+title: "Dashboard Service — Arquitectura: contrato público (H3) + catálogo de
+  APIs (H8)"
 status: borrador
-source: specs/dashboard/apis-publicas.md
-updated: 2026-10-22T23:09:31.272Z
+source: specs/dashboard/spec.md (H3, aprobada) +
+  specs/dashboard/apis-publicas.md (H8, aprobada)
+updated: 2026-10-24T00:05:43.819Z
 ---
 
 ## Fuente
 
-- Especificación funcional: `specs/dashboard/apis-publicas.md` (H8 — Catálogo APIs públicas Dashboard Meridian)
-- `project.yaml`: `java.group_id: com.meridian`, `java.base_package: com.meridian.users` (auth-service)
-- Arquitectura de referencia: `specs/auth/arquitectura.md` (patrón de capas del proyecto)
+- Especificación funcional del contrato público: `specs/dashboard/spec.md` (H3 — **aprobada**). Es la fuente de
+  verdad del shape expuesto al cliente; si algo de este documento la contradice, gana H3.
+- Catálogo de proveedores externos: `specs/dashboard/apis-publicas.md` (H8 — aprobada). Sigue vigente para
+  adapters, cache y modo mock; no cambia en esta revisión salvo lo indicado en §9.
+- `project.yaml`: `java.group_id: com.meridian` (el `base_package` del dashboard-service se deriva del
+  group_id + artifact, ver nota de §1; `java.base_package` de `project.yaml` es del auth-service).
+- Patrón JWT de referencia: `services/auth-service` (`JwtConfig`, `JwtService`, `AuthController./me`) — el
+  dashboard-service **valida** tokens emitidos por el auth-service, no los emite.
+- Código ya construido en el repo (`services/dashboard-service`, hito H8): scaffold, adapters (`DolarApi`,
+  `Frankfurter`, `CoinGecko`, `Finnhub`, `News`), cache en memoria, mock fixtures, un único endpoint
+  `GET /api/v1/dashboard` sin JWT. Este documento reemplaza ese borrador del endpoint único.
+
+## 0. Qué cambia respecto a lo ya implementado (resumen para Tech Lead / dev)
+
+La sesión anterior (H8) dejó construido el catálogo de adapters + cache + mock, y un único endpoint
+`GET /api/v1/dashboard` **sin JWT** que devuelve un `DashboardResponse` plano (listas `dolar`, `fx`, `crypto`,
+`cryptoHistory`, `equities`, `equityCandles`, `news`, `degraded`). La especificación H3 (aprobada, posterior al
+borrador) exige un contrato distinto. Cambios obligatorios:
+
+| # | Qué cambia | De → A |
+|---|-----------|--------|
+| 1 | Endpoints | Uno (`GET /api/v1/dashboard`) → **tres**: `GET /api/v1/dashboard/summary`, `GET /api/v1/dashboard/charts`, `GET /api/v1/dashboard/news` |
+| 2 | Autenticación | Sin protección → **JWT obligatorio** (mismo `JWT_SECRET` HS256 que `auth-service`) en los tres endpoints |
+| 3 | Shape de `summary` | Listas planas (`dolar`, `fx`, `equityCandles`, …) → objeto con `brand`, `generatedAt`, `fx.quotes.{usd_oficial,usd_blue}`, `crypto.{bitcoin,ethereum}`, `equities.{AAPL,MSFT,SPY}`, `degraded: []` |
+| 4 | `charts` y `news` | No existían como endpoints propios → nuevos, con su propio shape (§4.2, §4.3) |
+| 5 | FX internacional (Frankfurter) | Se consultaba en el endpoint único → **no se expone** en ningún endpoint H3 (queda implementado pero sin invocar desde la orquestación pública; ver §3.4) |
+| 6 | `DashboardResponse` (DTO plano actual) y `DashboardController.getDashboard()` | Quedan **retirados**: no son parte del contrato H3. Dev los reemplaza; no se mantienen "por si acaso" (evitar dos contratos vivos) |
+| 7 | Tercer ticker de equities | Pregunta abierta en H8/H3 → **se resuelve acá: `SPY`** (ya es el valor usado en `DashboardMockFixtures`; no se usa `^GSPC`, no disponible en free tier de Finnhub) |
+| 8 | Degraded en `charts`/`news` | Pregunta abierta en H3 → **se resuelve acá**: cada uno tiene una sola sección, así que es un booleano `degraded` (no una lista) — ver §4.2–§4.3 |
+
+**`services/dashboard-service/.m2-local` ya no está en el repositorio**: se agregó en el commit
+`5c4f2cc` (tester, TASK-44) y se removió en `12b504a` (checkpoint automático de la corrida `20261023-b0e7`,
+previo a esta corrida). `git ls-tree -r HEAD` confirma que no hay ningún `.m2-local` rastreado, y
+`.gitignore` (raíz) + `services/dashboard-service/.gitignore` + `.dockerignore` ya lo excluyen
+(`.m2-local/`). **No hace falta ninguna acción de limpieza adicional**; si una tarea de DevOps quiere
+verificarlo, el comando es `git ls-tree -r HEAD -- services/dashboard-service | grep m2-local` (debe no
+devolver nada).
 
 ---
 
@@ -17,367 +53,335 @@ updated: 2026-10-22T23:09:31.272Z
 
 | Parámetro | Valor | Fuente |
 |-----------|-------|--------|
-| Carpeta | `services/dashboard-service` | nueva — H8 define un servicio independiente |
+| Carpeta | `services/dashboard-service` | ya existe (H8) |
 | `groupId` | `com.meridian` | `project.yaml java.group_id` |
-| `artifactId` | `dashboard-service` | spec: "dashboard-service" |
-| `base_package` | `com.meridian.dashboard` | `group_id` + artifact (patrón del proyecto; `java.base_package` de `project.yaml` pertenece al auth-service) |
-| Clase principal | `DashboardApplication` | `base_package` + convención `*Application` |
-| Java | 21 | default (no en `project.yaml java.version`) |
-| Spring Boot | 3.x última estable | default |
-| HTTP cliente | `spring-boot-starter-webflux` (solo `WebClient`) | adapters consumen APIs externas de forma no bloqueante; no expone endpoints reactivos — la API propia sigue siendo MVC/Servlet |
-| Persistencia | **ninguna** | no hay modelo de datos persistido; cache en memoria |
-| Puerto | 8081 | evitar colisión con auth-service (8080) |
-| API versioning | **deshabilitado** | `api.versioning` ausente en `project.yaml` |
+| `artifactId` | `dashboard-service` | ya existe |
+| `base_package` | `com.meridian.dashboard` | ya existe (derivado de group_id + artifact; ver nota de H8) |
+| Clase principal | `DashboardApplication` | ya existe |
+| Java / Spring Boot | 21 / 3.x | ya existe |
+| HTTP cliente externo | `spring-boot-starter-webflux` (solo `WebClient`) | ya existe |
+| **Validación JWT** | **nueva dependencia**: `jjwt-api` / `jjwt-impl` / `jjwt-jackson` (misma versión que `auth-service`, hoy `0.12.6`) | el dashboard-service NO agrega `spring-boot-starter-security`: sigue el mismo patrón liviano que `auth-service` (sin filter chain de Spring Security, validación manual con JJWT) para no introducir un stack nuevo sin necesidad |
+| Persistencia | ninguna | sin cambios |
+| Puerto | 8081 | sin cambios |
+| API versioning | deshabilitado (`api.versioning` ausente en `project.yaml`) | todos los endpoints bajo `/api/v1/` sin versión por path |
 
-> **Nota sobre `base_package`**: `project.yaml` declara `java.base_package: com.meridian.users`, que es la identidad del auth-service ya existente. El dashboard-service es un servicio independiente; su `base_package` se deriva del `group_id` `com.meridian` más el artifact `dashboard`, siguiendo el mismo patrón. Si la persona prefiere otra convención, actualizar `project.yaml` con `java.dashboard_base_package` antes de implementar.
+**Dependencia operativa nueva**: `JWT_SECRET` del dashboard-service **debe ser el mismo valor** que el
+`JWT_SECRET` del auth-service (misma clave HMAC-SHA256, el dashboard-service solo valida, no emite). Es una
+tarea de DevOps: compartir el secreto entre ambos servicios en `docker-compose.yml`, CI y Helm (ver §9).
 
 ---
 
-## 2. Árbol de paquetes
+## 2. Árbol de paquetes (actualizado)
 
 ```
 services/dashboard-service/
-├── pom.xml
-├── mvnw / mvnw.cmd / .mvn/wrapper/
-├── .gitignore
-├── README.md
+├── pom.xml                                        # + jjwt-api/impl/jackson
 └── src/
     ├── main/
     │   ├── java/com/meridian/dashboard/
     │   │   ├── DashboardApplication.java
     │   │   ├── config/
-    │   │   │   ├── WebClientConfig.java          # beans WebClient por proveedor (timeout, base URL)
-    │   │   │   └── OpenApiConfig.java            # springdoc GroupedOpenApi
-    │   │   ├── exception/                        # contrato de error transversal
-    │   │   │   ├── ErrorResponse.java            # record
-    │   │   │   ├── FieldError.java               # record
-    │   │   │   ├── ErrorCode.java                # enum: VALIDATION_ERROR, BAD_REQUEST, NOT_FOUND, CONFLICT, INTERNAL_ERROR
-    │   │   │   ├── GlobalExceptionHandler.java   # @RestControllerAdvice
-    │   │   │   ├── NotFoundException.java        # base abstracta (RuntimeException)
-    │   │   │   └── ConflictException.java        # base abstracta (RuntimeException)
+    │   │   │   ├── WebClientConfig.java
+    │   │   │   ├── DashboardExecutorConfig.java
+    │   │   │   ├── OpenApiConfig.java              # + SecurityScheme bearerAuth, ejemplos nuevos
+    │   │   │   └── WebMvcConfig.java               # NUEVO — registra JwtAuthInterceptor en /api/v1/dashboard/**
+    │   │   ├── security/                           # NUEVO — transversal, mismo nivel que config/ y exception/
+    │   │   │   ├── JwtConfig.java                  # @ConfigurationProperties("jwt"): secret (obligatorio)
+    │   │   │   ├── JwtValidator.java                # valida firma HS256 + expiración (sin emitir tokens)
+    │   │   │   └── JwtAuthInterceptor.java          # HandlerInterceptor: exige Authorization: Bearer <token>
+    │   │   ├── exception/
+    │   │   │   ├── ErrorResponse.java / FieldError.java / GlobalExceptionHandler.java
+    │   │   │   ├── ErrorCode.java                  # + UNAUTHORIZED
+    │   │   │   ├── NotFoundException.java / ConflictException.java
+    │   │   │   ├── UnauthorizedException.java      # NUEVO — 401, mensaje "Credenciales inválidas"
+    │   │   │   └── UnsupportedParameterException.java  # NUEVO — 400, un solo tipo para asset/range/topic inválidos
     │   │   └── dashboard/
     │   │       ├── controller/
-    │   │       │   └── DashboardController.java  # @RestController @RequestMapping("/api/v1/dashboard")
+    │   │       │   └── DashboardController.java    # 3 métodos: getSummary / getCharts / getNews
     │   │       ├── service/
-    │   │       │   └── DashboardService.java     # agrega respuestas de todos los adapters
-    │   │       ├── adapter/
-    │   │       │   ├── DolarApiAdapter.java      # DolarApi — cotizaciones ARS
-    │   │       │   ├── FrankfurterAdapter.java   # Frankfurter ECB — FX internacional (opcional)
-    │   │       │   ├── CoinGeckoAdapter.java     # CoinGecko — precio y serie cripto
-    │   │       │   ├── FinnhubAdapter.java       # Finnhub — quote + velas (equities)
-    │   │       │   └── NewsAdapter.java          # NewsAPI con fallback a HN Algolia
+    │   │       │   ├── DashboardService.java       # orquesta summary (fx+crypto+equities, SIN Frankfurter/news)
+    │   │       │   ├── ChartsService.java           # NUEVO — serie histórica por asset+range
+    │   │       │   ├── NewsService.java              # NUEVO — feed de noticias con límite
+    │   │       │   └── SupportedAsset.java           # NUEVO — enum BTC/ETH/AAPL/MSFT/SPY + mapeo a id interno
+    │   │       ├── adapter/                          # sin cambios de contrato externo (DolarApi, Frankfurter*,
+    │   │       │   ├── DolarApiAdapter.java           # CoinGecko, Finnhub, News) — Frankfurter queda implementado
+    │   │       │   ├── FrankfurterAdapter.java        # pero deja de invocarse desde la orquestación pública (§3.4)
+    │   │       │   ├── CoinGeckoAdapter.java
+    │   │       │   ├── FinnhubAdapter.java
+    │   │       │   └── NewsAdapter.java
     │   │       ├── cache/
-    │   │       │   └── DashboardCacheService.java # cache en memoria (ConcurrentHashMap + TTL) + degraded
+    │   │       │   └── DashboardCacheService.java    # sin cambios
     │   │       ├── dto/
-    │   │       │   ├── DashboardResponse.java    # record: dolar, fx, crypto, equities, news, degraded[]
-    │   │       │   ├── DolarResponse.java        # record: tipo, compra, venta
-    │   │       │   ├── FxRateResponse.java       # record: from, to, rate
-    │   │       │   ├── CryptoResponse.java       # record: id, symbol, priceUsd, change24h
-    │   │       │   ├── CryptoPricePoint.java     # record: timestamp, priceUsd
-    │   │       │   ├── EquityQuoteResponse.java  # record: ticker, price, currency
-    │   │       │   ├── CandleResponse.java       # record: ticker, ohlcPoints[]
-    │   │       │   ├── OhlcPoint.java            # record: t, o, h, l, c, v
-    │   │       │   └── NewsArticleResponse.java  # record: id, title, summary, source, publishedAt, url, topic
+    │   │       │   ├── SummaryResponse.java           # NUEVO — brand, generatedAt, fx, crypto, equities, degraded
+    │   │       │   ├── FxSection.java                  # NUEVO — quotes: Map<String, RateQuote>
+    │   │       │   ├── RateQuote.java                  # NUEVO — compra, venta
+    │   │       │   ├── CryptoSection.java               # NUEVO — Map<String, CryptoQuote>
+    │   │       │   ├── CryptoQuote.java                 # NUEVO — priceUsd, change24hPct
+    │   │       │   ├── EquitiesSection.java             # NUEVO — Map<String, EquityQuote>
+    │   │       │   ├── EquityQuote.java                 # NUEVO — price, currency
+    │   │       │   ├── ChartsResponse.java              # NUEVO — asset, range, points, degraded (boolean)
+    │   │       │   ├── ChartPoint.java                  # NUEVO — t (Instant), v (BigDecimal)
+    │   │       │   ├── NewsResponse.java                 # NUEVO — items, degraded (boolean)
+    │   │       │   ├── NewsArticleResponse.java          # existe — se reutiliza tal cual dentro de NewsResponse.items
+    │   │       │   ├── DolarResponse.java / FxRateResponse.java / CryptoResponse.java / CryptoPricePoint.java
+    │   │       │   ├── EquityQuoteResponse.java / CandleResponse.java / OhlcPoint.java
+    │   │       │   └── DashboardResponse.java            # RETIRAR — ya no es el contrato público (§0, fila 6)
     │   │       └── mock/
-    │   │           └── DashboardMockFixtures.java # fixtures estáticas para DASHBOARD_USE_MOCK=true
+    │   │           └── DashboardMockFixtures.java        # sin cambios de datos; agrega accesores por sección pública
     │   └── resources/
-    │       └── application.yml
+    │       └── application.yml                            # + bloque jwt.secret
     └── test/
         ├── java/com/meridian/dashboard/
-        │   ├── DashboardApplicationTest.java     # contextLoads
+        │   ├── security/
+        │   │   ├── JwtValidatorTest.java                   # NUEVO
+        │   │   └── JwtAuthInterceptorTest.java              # NUEVO
         │   └── dashboard/
         │       ├── controller/
-        │       │   └── DashboardControllerTest.java   # @WebMvcTest + mock DashboardService
+        │       │   └── DashboardControllerTest.java         # @WebMvcTest — 3 endpoints, 200/401/400 por caso
         │       ├── service/
-        │       │   └── DashboardServiceTest.java      # @ExtendWith(MockitoExtension)
-        │       ├── adapter/
-        │       │   ├── DolarApiAdapterTest.java        # MockWebServer
-        │       │   ├── CoinGeckoAdapterTest.java       # MockWebServer
-        │       │   ├── FinnhubAdapterTest.java         # MockWebServer
-        │       │   └── NewsAdapterTest.java            # MockWebServer
-        │       └── cache/
-        │           └── DashboardCacheServiceTest.java  # JUnit 5
-        └── resources/
-            └── application.yml                   # config de tests (mock mode, sin keys)
+        │       │   ├── DashboardServiceTest.java
+        │       │   ├── ChartsServiceTest.java                # NUEVO
+        │       │   └── NewsServiceTest.java                  # NUEVO
+        │       └── (adapter/cache/mock sin cambios de cobertura)
+        └── resources/application.yml                          # + jwt.secret de test (≥32 bytes, fijo)
 ```
 
-> **Regla de paquetes**: estructura por subpaquetes bajo el módulo `dashboard`. La capa `adapter/` reemplaza a `repository/` (no hay persistencia); `cache/` es la capa de almacenamiento en memoria. Prohibido paquete plano (`dashboard.DashboardController` sin subcapa).
+> Los DTOs internos de adapter (`DolarResponse`, `CryptoResponse`, `EquityQuoteResponse`, etc.) **no se tocan**:
+> son el modelo interno de cada adapter. Los DTOs nuevos de `dto/` son el **contrato público** (lo que el
+> controller devuelve); el service mapea de uno a otro. No usar MapStruct para estos mapeos (son agregaciones
+> con claves dinámicas tipo `Map<String, X>`, no 1:1 entidad↔DTO); mapeo manual en el service está bien acá.
 
 ---
 
-## 3. Módulo de dominio: `dashboard`
+## 3. Modelo de datos del contrato público
 
-### 3.1 Responsabilidades por capa
-
-| Capa | Paquete | Responsabilidad |
-|------|---------|-----------------|
-| Controller | `dashboard.controller` | HTTP, parámetros, `@Valid`, status. Devuelve `DashboardResponse`. |
-| Service | `dashboard.service` | Orquesta adapters en paralelo; agrega resultados; marca secciones degraded. |
-| Adapter | `dashboard.adapter` | Llama a proveedor externo vía `WebClient`. Devuelve datos del dominio o lanza excepción (timeout, error HTTP). Un adapter por proveedor. |
-| Cache | `dashboard.cache` | Guarda la última respuesta exitosa de cada adapter con TTL; sirve stale si el proveedor falla con TTL vencido. |
-| DTO | `dashboard.dto` | Modelo normalizado de datos (contratos internos + respuesta API pública). |
-| Mock | `dashboard.mock` | Fixtures estáticas cargadas en memoria; devuelve datos fijos cuando `DASHBOARD_USE_MOCK=true`. |
-
-### 3.2 Modelo `DashboardResponse`
+### 3.1 `SummaryResponse` (`GET /api/v1/dashboard/summary`)
 
 ```java
-public record DashboardResponse(
-    List<DolarResponse>       dolar,
-    List<FxRateResponse>      fx,
-    List<CryptoResponse>      crypto,
-    List<CryptoPricePoint>    cryptoHistory,  // serie 7d (BTC + ETH)
-    List<EquityQuoteResponse> equities,
-    List<CandleResponse>      equityCandles,
-    List<NewsArticleResponse> news,
-    List<String>              degraded        // secciones con falla: "dolar", "crypto", "equities", "news"
+public record SummaryResponse(
+    String brand,                        // "Meridian" — nunca "Soma"/"Ops Deck"
+    Instant generatedAt,
+    FxSection fx,
+    CryptoSection crypto,
+    EquitiesSection equities,
+    List<String> degraded               // subconjunto de {"fx", "crypto", "equities"} — nunca null, [] si todo ok
 ) {}
+
+public record FxSection(Map<String, RateQuote> quotes) {}       // claves: "usd_oficial", "usd_blue"
+public record RateQuote(BigDecimal compra, BigDecimal venta) {}
+
+public record CryptoSection(Map<String, CryptoQuote> values) {} // claves: "bitcoin", "ethereum"
+public record CryptoQuote(BigDecimal priceUsd, BigDecimal change24hPct) {}
+
+public record EquitiesSection(Map<String, EquityQuote> values) {} // claves: "AAPL", "MSFT", "SPY"
+public record EquityQuote(BigDecimal price, String currency) {}
 ```
 
-- `degraded` es una lista de strings con los nombres de sección que fallaron. Nunca `null`; vacía si todo está bien.
-- Los campos de sección pueden ser listas vacías si la sección está degraded.
+**Mapeo de nombres (interno → público) — documentar explícitamente porque no son iguales:**
 
-### 3.3 Proveedores y adapters
+| Sección pública | Viene de (adapter interno) | Nota |
+|---|---|---|
+| `fx.quotes.usd_oficial` / `usd_blue` | `DolarApiAdapter` (tipo `oficial` / `blue`) | **el campo público `fx` son los tipos de dólar ARS**, no el Frankfurter internacional. Es la nomenclatura que exige H3; puede confundir porque H8 llama "fx" al adapter de Frankfurter — documentarlo en el README para que el próximo dev no lo reabra como bug |
+| `crypto.bitcoin` / `crypto.ethereum` | `CoinGeckoAdapter.fetchPrices()` | `change24h` interno → `change24hPct` público (mismo valor, nombre más explícito) |
+| `equities.AAPL` / `MSFT` / `SPY` | `FinnhubAdapter.fetchQuotes()` | sin cambio de valor, solo se indexa por ticker en vez de lista |
+| `degraded` (summary) | `{dolar, crypto, equities}` internos → renombrar `"dolar"` a `"fx"` en la lista pública | Frankfurter y news **no** participan de `summary`; H3 menciona "news" en el enunciado general de degraded, pero `summary` no trae noticias — se documenta acá para no generar un valor `"news"` que no corresponde a esta respuesta |
 
-| Adapter | URL base | Autenticación | Obligatorio |
-|---------|----------|---------------|-------------|
-| `DolarApiAdapter` | `https://dolarapi.com` | ninguna | sí |
-| `FrankfurterAdapter` | `https://api.frankfurter.app` | ninguna | no (opcional) |
-| `CoinGeckoAdapter` | `https://api.coingecko.com` | ninguna (free tier) | sí |
-| `FinnhubAdapter` | `https://finnhub.io` | `token` query param — `FINNHUB_API_KEY` | sí (fixture si sin key) |
-| `NewsAdapter` | `https://newsapi.org` (primario) + `https://hn.algolia.com` (fallback) | `X-Api-Key` — `NEWS_API_KEY` | sí (fallback si sin key) |
+### 3.2 `ChartsResponse` (`GET /api/v1/dashboard/charts`)
 
-### 3.4 Fixtures de equities (modo demo / sin key Finnhub)
+```java
+public record ChartsResponse(String asset, String range, List<ChartPoint> points, boolean degraded) {}
+public record ChartPoint(Instant t, BigDecimal v) {}
+```
 
-Cuando `FINNHUB_API_KEY` no está configurada o `DASHBOARD_USE_MOCK=true`:
+- `degraded = true` cuando el proveedor del activo solicitado falló/expiró sin cache válida (`points` puede
+  venir vacío o con el último stale disponible, igual que hoy hace `DashboardCacheService`).
+- Resuelve la pregunta abierta de H3 sobre "fallo parcial en charts": al ser una sola sección por request,
+  un booleano es suficiente (no se necesita una lista como en `summary`).
 
-| Ticker | Precio (fixture) |
-|--------|-----------------|
-| AAPL | 175.00 USD |
-| MSFT | 415.00 USD |
-| SPY | 450.00 USD |
+### 3.3 `NewsResponse` (`GET /api/v1/dashboard/news`)
 
-> Son valores estáticos, documentados en `DashboardMockFixtures`. El dev no debe inventar precios dinámicos.
+```java
+public record NewsResponse(List<NewsArticleResponse> items, boolean degraded) {}
+```
+
+- Reutiliza `NewsArticleResponse` (ya tiene `id, title, summary, source, publishedAt, url, topic`).
+- `degraded = true` **solo** cuando fallan NewsAPI **y** el fallback HN Algolia (el fallback a HN Algolia por
+  sí solo no es degraded: es el comportamiento normal documentado en H8).
+
+### 3.4 Activos y tópicos soportados
+
+```java
+public enum SupportedAsset {
+    BTC("bitcoin", true), ETH("ethereum", true),
+    AAPL("AAPL", false), MSFT("MSFT", false), SPY("SPY", false);
+    // (symbol, isCrypto) — BTC/ETH resuelven contra CoinGeckoAdapter; AAPL/MSFT/SPY contra FinnhubAdapter
+}
+```
+
+- `charts`: `asset` obligatorio, debe matchear un valor de `SupportedAsset` (case-insensitive aceptado,
+  normalizado a mayúsculas); `range` opcional, default y único valor soportado `7d` (ver pregunta abierta de
+  H3 — queda así hasta que se pida otro rango). Cualquier otro valor en `asset` o `range` → `UnsupportedParameterException`
+  → 400 `VALIDATION_ERROR` con `FieldError(campo, "valor no soportado")`, **nunca invención de datos**.
+- `news`: `topic` opcional, único valor soportado `ai-tech` (default si se omite); `limit` opcional, default
+  `8`, rango válido `1..8` (`@Min(1) @Max(8)`); `topic` inválido → mismo `UnsupportedParameterException` → 400.
+- **Frankfurter (FX internacional) queda fuera de los tres endpoints H3** por decisión de este documento: no
+  hay ningún requisito H3 que lo use, y mantenerlo en la orquestación de `summary` generaría una llamada
+  externa y una posible entrada en `degraded` para una sección que el contrato público ni siquiera expone.
+  El adapter se conserva en el código (es válido para un futuro endpoint de FX internacional) pero
+  `DashboardService.getSummary()` no lo invoca.
 
 ---
 
-## 4. Endpoint expuesto
+## 4. Endpoints expuestos (reemplazan al único `GET /api/v1/dashboard`)
 
-No hay `api.versioning.enabled` → todos los endpoints bajo `/api/v1/`.
+Todos bajo JWT (ver §5). Ninguno modifica datos (solo lectura).
 
-### GET `/api/v1/dashboard`
+### 4.1 `GET /api/v1/dashboard/summary`
 
 | | |
 |---|---|
-| **Controller** | `DashboardController.getDashboard()` |
-| **Request** | ninguno (sin parámetros obligatorios en MVP) |
-| **Response exitosa** | `200 OK` + `DashboardResponse` |
-| **Content-Type** | `application/json` |
+| Controller | `DashboardController.getSummary()` |
+| Request | sin parámetros |
+| 200 | `SummaryResponse` — siempre, mientras pueda servir al menos una sección (fresca, cacheada o stale) |
+| 401 | sin JWT / JWT inválido o expirado → `ErrorCode.UNAUTHORIZED` |
+| 500 | error inesperado de orquestación → `ErrorCode.INTERNAL_ERROR` |
 
-**Tabla de errores:**
+### 4.2 `GET /api/v1/dashboard/charts?asset=<asset>&range=7d`
 
-| Caso | HTTP | `code` | Excepción |
-|------|------|--------|-----------|
-| Error inesperado en orquestación | 500 | `INTERNAL_ERROR` | `Exception` |
+| | |
+|---|---|
+| Controller | `DashboardController.getCharts(asset, range)` |
+| Request | `asset` obligatorio (`BTC\|ETH\|AAPL\|MSFT\|SPY`), `range` opcional (default `7d`, único valor soportado) |
+| 200 | `ChartsResponse` |
+| 400 | `asset` o `range` no soportado → `ErrorCode.VALIDATION_ERROR` (sin inventar datos) |
+| 401 | sin JWT válido |
+| 500 | error inesperado |
 
-> Los fallos de proveedores individuales **no** generan 5xx: se reflejan en `DashboardResponse.degraded`. El endpoint devuelve siempre `200 OK` mientras pueda servir al menos datos parciales o cacheados.
+### 4.3 `GET /api/v1/dashboard/news?topic=ai-tech&limit=8`
+
+| | |
+|---|---|
+| Controller | `DashboardController.getNews(topic, limit)` |
+| Request | `topic` opcional (default/único valor `ai-tech`), `limit` opcional (default `8`, rango `1..8`) |
+| 200 | `NewsResponse` — hasta `limit` artículos |
+| 400 | `topic` no soportado o `limit` fuera de rango → `ErrorCode.VALIDATION_ERROR` |
+| 401 | sin JWT válido |
+| 500 | error inesperado |
 
 ---
 
-## 5. Flujo de datos
+## 5. Protección JWT (nueva, transversal a los tres endpoints)
+
+### 5.1 Flujo
 
 ```
-GET /api/v1/dashboard
-  → DashboardController.getDashboard()
-      → DashboardService.getDashboard()
-          Ejecuta en paralelo (CompletableFuture o llamadas WebClient concurrentes):
-            DolarApiAdapter.fetchDolar()      → List<DolarResponse>   (o "dolar" en degraded)
-            FrankfurterAdapter.fetchFx()      → List<FxRateResponse>  (o "fx" en degraded)
-            CoinGeckoAdapter.fetchPrices()    → List<CryptoResponse>  (o "crypto" en degraded)
-            CoinGeckoAdapter.fetchHistory()   → List<CryptoPricePoint>(o "cryptoHistory" en degraded)
-            FinnhubAdapter.fetchQuotes()      → List<EquityQuoteResponse> (o "equities" en degraded)
-            FinnhubAdapter.fetchCandles()     → List<CandleResponse>  (o "equityCandles" en degraded)
-            NewsAdapter.fetchNews()           → List<NewsArticleResponse>(o "news" en degraded)
-          Cada adapter:
-            1. Si DASHBOARD_USE_MOCK=true → devuelve fixture de DashboardMockFixtures
-            2. Consulta DashboardCacheService → si hay entrada válida (dentro de TTL) → devuelve cached
-            3. Llama proveedor externo vía WebClient (timeout 3–5 s)
-            4. Si éxito → guarda en cache → devuelve datos
-            5. Si timeout/error → intenta devolver stale (cache vencida con indicador)
-                                → si no hay stale → agrega sección a degraded, devuelve lista vacía
-          Agrega resultados en DashboardResponse (degraded = secciones fallidas)
-      ← DashboardResponse
-  ← 200 OK + DashboardResponse
+GET /api/v1/dashboard/{summary|charts|news}
+  → JwtAuthInterceptor.preHandle()
+      1. Lee header "Authorization"
+      2. Si falta o no empieza con "Bearer " → UnauthorizedException → 401
+      3. JwtValidator.isValid(token): verifica firma HS256 con JWT_SECRET y expiración (misma clave que
+         auth-service; NO valida contra la base de usuarios — el dashboard-service no tiene persistencia)
+      4. Si inválido/expirado → UnauthorizedException → 401
+      5. Si válido → continúa al Controller
+  → DashboardController.get*()  (solo se ejecuta si el interceptor dejó pasar la request)
 ```
 
----
+- `JwtAuthInterceptor` se registra en `WebMvcConfig` **solo** para `/api/v1/dashboard/**`. No afecta
+  `/actuator/health`, `/actuator/info`, `/v3/api-docs` ni `/swagger-ui.html` (deben seguir públicos).
+- El dashboard-service no necesita el `userId`/`email` del token para responder (no hay datos por-usuario);
+  `JwtValidator` solo confirma firma + expiración. No se agrega lectura de claims salvo que un endpoint
+  futuro lo requiera.
+- Mensaje de error 401: igual al de `auth-service` para consistencia de contrato entre servicios:
+  `{"code":"UNAUTHORIZED","message":"Credenciales inválidas","details":[],"timestamp":"..."}`.
 
-## 6. Cache y modo degraded
+### 5.2 Config
 
-### 6.1 Estrategia de cache
-
-- `DashboardCacheService` usa un `ConcurrentHashMap<String, CacheEntry>` en memoria.
-- Cada `CacheEntry` guarda el dato serializado (o el objeto) y el `Instant` de la última actualización.
-- TTL por defecto: `DASHBOARD_CACHE_TTL_SECONDS` (default: 60 s). CoinGecko respeta TTL ≥ 60 s siempre.
-- Si el TTL no expiró: se sirve el dato sin llamar al proveedor.
-- Si el TTL expiró y el proveedor responde: actualiza la cache.
-- Si el TTL expiró y el proveedor falla: sirve el dato stale (con flag interno); la sección se marca `degraded`.
-
-### 6.2 Modo degraded
-
-- Cada sección (dolar, fx, crypto, cryptoHistory, equities, equityCandles, news) se maneja de forma independiente.
-- Un fallo en un adapter no afecta a los demás.
-- `DashboardResponse.degraded` lista las secciones que no pudieron servirse con datos frescos.
-
-### 6.3 Modo mock (`DASHBOARD_USE_MOCK=true`)
-
-- Todos los adapters delegan a `DashboardMockFixtures` antes de cualquier llamada HTTP.
-- No se realiza ninguna llamada a proveedores externos.
-- `degraded` siempre vacío en modo mock.
-
----
-
-## 7. Configuración (`application.yml`)
+`application.yml`:
 
 ```yaml
-spring:
-  application:
-    name: dashboard-service
-  main:
-    web-application-type: servlet   # MVC, no reactivo
-
-server:
-  port: ${PORT:8081}
-  error:
-    include-stacktrace: never
-    include-message: never
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      probes:
-        enabled: true
-
-springdoc:
-  api-docs.path: /v3/api-docs
-  swagger-ui.path: /swagger-ui.html
-
-dashboard:
-  cache:
-    ttl-seconds: ${DASHBOARD_CACHE_TTL_SECONDS:60}
-  use-mock: ${DASHBOARD_USE_MOCK:false}
-  providers:
-    dolar-api:
-      base-url: https://dolarapi.com
-      timeout-seconds: 5
-    frankfurter:
-      base-url: https://api.frankfurter.app
-      timeout-seconds: 5
-    coin-gecko:
-      base-url: https://api.coingecko.com
-      timeout-seconds: 5
-    finnhub:
-      base-url: https://finnhub.io
-      api-key: ${FINNHUB_API_KEY:}          # vacío = modo fixture
-      timeout-seconds: 5
-    news-api:
-      base-url: https://newsapi.org
-      api-key: ${NEWS_API_KEY:}             # vacío = fallback HN Algolia
-      timeout-seconds: 5
-    hn-algolia:
-      base-url: https://hn.algolia.com
-      timeout-seconds: 5
+jwt:
+  secret: ${JWT_SECRET}
 ```
 
-**Variables de entorno:**
-
-| Variable | Obligatoria | Default | Descripción |
-|----------|-------------|---------|-------------|
-| `FINNHUB_API_KEY` | no | (vacía) | Key Finnhub; sin ella: fixtures de equities |
-| `NEWS_API_KEY` | no | (vacía) | Key NewsAPI; sin ella: fallback a HN Algolia |
-| `DASHBOARD_CACHE_TTL_SECONDS` | no | `60` | TTL de cache en segundos |
-| `DASHBOARD_USE_MOCK` | no | `false` | Modo demo offline |
-| `PORT` | no | `8081` | Puerto del servicio |
-
-> El servicio arranca sin `FINNHUB_API_KEY` ni `NEWS_API_KEY`; ninguna variable es `required` en Spring.
-
-**`application.yml` para tests** (`src/test/resources/application.yml`):
-
-```yaml
-spring:
-  application:
-    name: dashboard-service
-
-dashboard:
-  cache:
-    ttl-seconds: 60
-  use-mock: true   # tests corren en modo mock por defecto; sobreescribir en tests de adapters
-  providers:
-    dolar-api:
-      base-url: http://localhost:${mockserver.port}
-      timeout-seconds: 2
-    # ... resto de providers apuntando al MockWebServer del test
-```
+- Sin `expiration-ms`: el dashboard-service no emite tokens, solo valida el `exp` que ya viene en el JWT.
+- `JWT_SECRET` es **obligatoria** (sin default) — el servicio no debe arrancar sin ella (mismo criterio que
+  `auth-service`, que ya hace `Objects.requireNonNull` + validación de longitud ≥ 32 bytes en `JwtConfig`).
+  Esto es intencional y distinto del resto de variables del dashboard (`FINNHUB_API_KEY`, `NEWS_API_KEY`,
+  que sí son opcionales): sin secreto no hay forma de validar JWT, y servir datos sin poder autenticar
+  violaría el requisito "Protección por JWT en todos los endpoints del dashboard".
 
 ---
 
-## 8. `pom.xml` — dependencias clave
+## 6. OpenAPI
 
-Partir de la plantilla `pom.xml.md` del pack java con estos ajustes:
+- Agregar `@SecurityScheme(name = "bearerAuth", type = HTTP, scheme = "bearer", bearerFormat = "JWT")` a
+  nivel de `DashboardController` (igual que `AuthController`) y `@SecurityRequirement(name = "bearerAuth")`
+  en los tres métodos.
+- Reemplazar el ejemplo `DashboardMock` (shape viejo) por tres ejemplos nuevos: `SummaryMock`, `ChartsMock`,
+  `NewsMock`, usando `DashboardMockFixtures` adaptado a los nuevos DTOs.
+- Cumple el requisito H3 "OpenAPI actualizado": los tres paths documentados con parámetros, shape de
+  respuesta y el esquema de seguridad JWT.
+
+---
+
+## 7. Cache y degraded (extiende §6 de H8, sin cambiarla)
+
+- `DashboardCacheService` no cambia de implementación. Cambia **qué** se cachea: ya no hay una key
+  `"dolar"`/`"crypto"`/`"equities"`/`"news"` compartida por un único endpoint — las mismas keys se reutilizan
+  ahora desde `DashboardService` (summary), `ChartsService` (una key por asset, ej. `"chart:BTC:7d"`) y
+  `NewsService` (`"news:ai-tech"`). TTL sigue siendo `DASHBOARD_CACHE_TTL_SECONDS` (default 60s).
+- `summary.degraded`: lista, como hoy (ver mapeo de nombres en §3.1).
+- `charts.degraded` / `news.degraded`: booleano (ver §3.2–§3.3). Mismo criterio de "frescos vs stale vs sin
+  dato" ya implementado en `CacheResult`.
+
+---
+
+## 8. `pom.xml` — cambios
 
 | Acción | Dependencia |
 |--------|-------------|
-| **Agregar** | `spring-boot-starter-webflux` (para `WebClient`; sin levantar runtime reactivo en producción) |
-| **No agregar** | `spring-boot-starter-data-jpa`, driver de BD, `h2` (sin persistencia) |
-| **Agregar** (tests) | `com.squareup.okhttp3:mockwebserver` (scope test) para tests de adapters |
-| Mantener | `spring-boot-starter-web`, `spring-boot-starter-validation`, `spring-boot-starter-actuator`, Lombok, MapStruct, springdoc, JaCoCo |
-
-> `spring-boot-starter-webflux` es necesario para `WebClient` aunque el runtime de la app sea Servlet (MVC).
-> Spring Boot permite esta combinación; no activa el loop reactivo de Netty si `spring-boot-starter-web` está presente.
+| Agregar | `io.jsonwebtoken:jjwt-api`, `jjwt-impl` (scope runtime), `jjwt-jackson` (scope runtime) — misma versión que `auth-service` (`jjwt.version` en `<properties>`, hoy `0.12.6`) |
+| Mantener | todo lo de H8 (`spring-boot-starter-webflux`, `mockwebserver` en test, etc.) |
+| No agregar | `spring-boot-starter-security` (se valida con JJWT a mano, igual que `auth-service`; ver §1) |
 
 ---
 
-## 9. Estrategia de tests
+## 9. Tests (extiende §9 de H8)
 
-| Capa | Clase | Tipo | Qué prueba |
-|------|-------|------|------------|
-| Controller | `DashboardControllerTest` | `@WebMvcTest` + `MockMvc` | GET `/api/v1/dashboard` devuelve 200 + body con campos esperados; degrada correctamente cuando el service devuelve secciones vacías. |
-| Service | `DashboardServiceTest` | `@ExtendWith(MockitoExtension)` | Orquestación de adapters; acumula degraded cuando un adapter falla; devuelve datos cacheados en segundo llamado. |
-| Adapter — DolarApi | `DolarApiAdapterTest` | JUnit 5 + `MockWebServer` | Mapea correctamente los tipos `oficial` y `blue`; devuelve lista vacía (+ log) en timeout. |
-| Adapter — CoinGecko | `CoinGeckoAdapterTest` | JUnit 5 + `MockWebServer` | Precio y variación 24h de BTC y ETH; serie histórica 7d; comportamiento en error 5xx. |
-| Adapter — Finnhub | `FinnhubAdapterTest` | JUnit 5 + `MockWebServer` | Quote de AAPL, MSFT, SPY con key; fixture sin key; comportamiento en timeout. |
-| Adapter — News | `NewsAdapterTest` | JUnit 5 + `MockWebServer` | NewsAPI devuelve 8 artículos normalizados; fallo NewsAPI → fallback HN Algolia; fallo ambos → degraded. |
-| Cache | `DashboardCacheServiceTest` | JUnit 5 | Sirve dato cacheado dentro del TTL; no llama al supplier si hay cache; devuelve stale tras TTL vencido con proveedor caído. |
-| Integración | `DashboardApplicationTest` | `@SpringBootTest` | `contextLoads` con `DASHBOARD_USE_MOCK=true` (sin proveedores externos). |
+| Capa | Clase | Qué prueba |
+|------|-------|------------|
+| Security | `JwtValidatorTest` | token válido / expirado / firma distinta / malformado |
+| Security | `JwtAuthInterceptorTest` | sin header → 401; header sin "Bearer " → 401; token válido → deja pasar |
+| Controller | `DashboardControllerTest` | `summary`/`charts`/`news`: 200 con JWT válido (mock mode), 401 sin JWT, 400 en `asset`/`range`/`topic`/`limit` inválidos |
+| Service | `DashboardServiceTest` | ya no llama a `FrankfurterAdapter`; `degraded` solo con `{fx, crypto, equities}` |
+| Service | `ChartsServiceTest` (nuevo) | BTC/ETH vía CoinGecko, equity vía Finnhub candles, asset no soportado → excepción, degraded cuando el proveedor falla |
+| Service | `NewsServiceTest` (nuevo) | NewsAPI ok (no degraded); NewsAPI caído + fallback HN ok (no degraded); ambos caídos → degraded=true |
+| Integración | `DashboardApplicationTest` | sin cambios (contextLoads, `DASHBOARD_USE_MOCK=true`) |
 
-JaCoCo: umbral mínimo **80%** line coverage. Exclusiones sugeridas: `DashboardApplication`, `DashboardMockFixtures` (datos estáticos sin lógica), clases de `config/` sin lógica.
+JaCoCo sigue en 80% mínimo. `src/test/resources/application.yml` necesita un `jwt.secret` fijo (≥32 bytes,
+cualquier valor de test) para que el contexto levante.
 
 ---
 
-## 10. Riesgos y decisiones pendientes para el Dev
+## 10. Tareas de DevOps / Documentación derivadas (no son trabajo del arquitecto, se dejan explícitas para Tech Lead)
 
-| # | Riesgo / decisión | Recomendación |
-|---|-------------------|---------------|
-| 1 | **`WebClient` en app Servlet**: usar `WebClient` de forma bloqueante (`.block()`) o adoptar `CompletableFuture` + `WebClient` para llamadas paralelas | Preferir `WebClient` + `.block()` en el service (simple, sin reactor en el path de llamada). Si la latencia importa, usar `Mono.zip` para paralelismo. Decidir en implementación; el plan acepta ambas. |
-| 2 | **Tercer ticker de Finnhub** (`SPY` vs índice equivalente en free tier) | La spec deja abierta la verificación en el free tier. El dev verifica al momento de implementar; si `SPY` no está disponible, documentar el ticker alternativo en `DashboardMockFixtures` y `README`. |
-| 3 | **Cache en memoria** vs Spring Cache / Caffeine | Cache en memoria con `ConcurrentHashMap` es suficiente para el MVP. Si el equipo prefiere `@Cacheable` + Caffeine, es una mejora válida pero no es alcance de H8. |
-| 4 | **Modelo normalizado de H3** | La spec indica que H3 define el contrato interno entre adapters y el aggregator. Los DTOs de esta arquitectura son una propuesta; si H3 ya tiene contratos definidos, el dev los usa en lugar de los DTOs propuestos acá. |
-| 5 | **`base_package` del dashboard-service** | `project.yaml` solo declara el base_package del auth-service. El valor `com.meridian.dashboard` se deriva del group_id + artifact. Si la persona quiere otro paquete, actualizarlo en `project.yaml` antes de implementar. |
-| 6 | **Colisión de puerto** | auth-service usa 8080; este spec propone 8081 para dashboard-service. Si el entorno tiene otro puerto reservado, actualizar `PORT` en `.env` / docker-compose. |
+1. **Compartir `JWT_SECRET`** entre `auth-service` y `dashboard-service` en `docker-compose.yml`, `.env`/`.env.example`, CI (GitHub Actions) y Helm — mismo valor, una sola variable de entorno gestionada como secreto en cada entorno.
+2. Actualizar `README.md`, Postman/Bruno y OpenAPI exportado del dashboard-service con los tres endpoints nuevos y el requisito de `Authorization: Bearer <token>` (ej. flujo: login contra `auth-service` → usar el `accessToken` contra `dashboard-service`).
+3. Nada que hacer sobre `.m2-local`: confirmado removido del repo y cubierto por `.gitignore`/`.dockerignore` (ver §0).
 
 ---
 
 ## 11. Checklist de arquitectura
 
-- [ ] Identidad del servicio tomada de `project.yaml` y del artifact `dashboard-service`
-- [ ] Árbol de paquetes con subpaquetes por capa (`controller/`, `service/`, `adapter/`, `cache/`, `dto/`, `mock/`)
-- [ ] Sin paquete plano (prohibido `dashboard.DashboardController` sin subcapa)
-- [ ] `GlobalExceptionHandler` en `exception/`; secciones degraded no generan 5xx
-- [ ] Todos los endpoints bajo `/api/v1/` (sin versioning activo)
-- [ ] Variables de entorno opcionales; servicio arranca sin keys
-- [ ] `DASHBOARD_USE_MOCK=true` deshabilita llamadas HTTP externas
-- [ ] Tests por capa con `MockWebServer` para adapters; JaCoCo ≥ 80%
-- [ ] `./mvnw -q -B verify` pasa (contextLoads + tests con mock mode)
+- [ ] Tres endpoints (`summary`, `charts`, `news`) protegidos por JWT compartido con `auth-service`, bajo `/api/v1/dashboard/`
+- [ ] `DashboardResponse` plano y `GET /api/v1/dashboard` sin JWT quedan retirados (no conviven con el nuevo contrato)
+- [ ] `SummaryResponse` con `brand`, `generatedAt`, `fx.quotes.{usd_oficial,usd_blue}`, `crypto.{bitcoin,ethereum}`, `equities.{AAPL,MSFT,SPY}`, `degraded: []`
+- [ ] `ChartsResponse`/`NewsResponse` con `degraded` booleano (decisión de este documento para la pregunta abierta de H3)
+- [ ] Tercer ticker de equities confirmado: `SPY`
+- [ ] Frankfurter implementado pero no invocado desde los endpoints públicos H3
+- [ ] Sin `spring-boot-starter-security`; validación JWT manual con JJWT, igual patrón que `auth-service`
+- [ ] `JWT_SECRET` obligatorio (sin default), mismo valor que `auth-service`
+- [ ] OpenAPI con `bearerAuth` en los tres endpoints
+- [ ] Ningún campo `activeUsers`/`sessionsToday`/`errors` ni mención a `Soma`/`SOMA`/`Ops Deck` en ningún DTO público (verificado: no hay ocurrencias en el código actual)
+- [ ] `.m2-local` confirmado fuera del repositorio; sin acción pendiente
+- [ ] JaCoCo ≥ 80%; `./mvnw -q -B verify` pasa

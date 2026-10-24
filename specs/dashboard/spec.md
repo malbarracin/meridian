@@ -1,8 +1,8 @@
 ---
 title: Dashboard — Especificación funcional (H3)
-status: borrador
+status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca7810faa9ddb10777255f7
-updated: 2026-10-23T23:56:21.576Z
+updated: 2026-10-23T23:59:16.360Z
 ---
 
 # Dashboard — Especificación funcional (H3)
