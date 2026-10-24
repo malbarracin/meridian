@@ -288,7 +288,7 @@ Testcontainers necesitan el daemon Docker accesible; guía en `delivery/testing.
 # dashboard-service — arquitectura y capas
 
 Documento de referencia para equipos que integran o mantienen el servicio. Describe la estructura real
-del código en `services/dashboard-service`, no un diseño futuro. La fuente de requisitos es
+del código en `services/dashboard-service`, no un diseño futuro. Fuentes: `specs/dashboard/spec.md` (H3) y
 `specs/dashboard/arquitectura-apis-publicas.md`.
 
 ## Identidad del servicio
@@ -298,12 +298,13 @@ del código en `services/dashboard-service`, no un diseño futuro. La fuente de 
 | Carpeta | `services/dashboard-service` | repositorio |
 | `groupId` | `com.meridian` | `pom.xml`; coincide con `project.yaml` (`java.group_id`) |
 | `artifactId` | `dashboard-service` | `pom.xml` |
-| Paquete base | `com.meridian.dashboard` | código (`DashboardApplication`); `project.yaml` declara el base package del auth-service |
+| Paquete base | `com.meridian.dashboard` | código (`DashboardApplication`) |
 | Clase principal | `DashboardApplication` | código |
 | Java | 21 | `pom.xml` |
 | Spring Boot | 3.5.16 | `pom.xml` |
 | Persistencia | ninguna; caché en memoria | `pom.xml` sin motor de datos |
 | Puerto | `8081` (`PORT` configurable) | `application.yml` |
+| Seguridad | JWT HMAC-SHA256 (`JWT_SECRET` obligatorio, alineado con auth-service) | `security/` |
 | Versionado de API | deshabilitado: una sola versión bajo `/api/v1` | `project.yaml` sin `api.versioning` |
 | Cliente HTTP | `WebClient` (spring-boot-starter-webflux) sobre runtime Servlet | `pom.xml` y `WebClientConfig` |
 
@@ -316,296 +317,129 @@ del código en `services/dashboard-service`, no un diseño futuro. La fuente de 
 com.meridian.dashboard
 ├── DashboardApplication.java
 ├── config/
-│   ├── WebClientConfig.java          # un WebClient por proveedor (base URL + timeouts)
+│   ├── WebClientConfig.java          # un WebClient por proveedor
 │   ├── DashboardExecutorConfig.java  # ExecutorService con hilos virtuales
+│   ├── WebMvcConfig.java             # registra JwtAuthInterceptor
 │   └── OpenApiConfig.java            # metadatos, ejemplos y grupo OpenAPI
-├── exception/                        # contrato de error transversal
-│   ├── ErrorResponse.java            # record code/message/details/timestamp
-│   ├── FieldError.java               # record field/message
-│   ├── ErrorCode.java                # enum de códigos estables
-│   ├── GlobalExceptionHandler.java   # @RestControllerAdvice
-│   ├── NotFoundException.java        # base abstracta
-│   └── ConflictException.java        # base abstracta
+├── security/
+│   ├── JwtConfig.java                # JWT_SECRET obligatorio
+│   ├── JwtValidator.java             # valida firma/expiración
+│   └── JwtAuthInterceptor.java       # Bearer en /api/v1/dashboard/**
+├── exception/                        # ErrorResponse, ErrorCode (+ UNAUTHORIZED), handler
 └── dashboard/
     ├── controller/
-    │   └── DashboardController.java  # @RequestMapping("/api/v1/dashboard")
+    │   └── DashboardController.java  # summary | charts | news
     ├── service/
-    │   └── DashboardService.java     # orquesta adapters en paralelo y arma degraded
+    │   ├── DashboardService.java     # getSummary()
+    │   ├── ChartsService.java        # getCharts(asset, range)
+    │   ├── NewsService.java          # getNews(topic, limit)
+    │   └── SupportedAsset.java       # BTC|ETH|AAPL|MSFT|SPY
     ├── cache/
-    │   └── DashboardCacheService.java # TTL por recurso + última respuesta exitosa
-    ├── adapter/
-    │   ├── DolarApiAdapter.java      # DolarApi: oficial y blue
-    │   ├── FrankfurterAdapter.java   # Frankfurter: USD→EUR/BRL
-    │   ├── CoinGeckoAdapter.java     # CoinGecko: precios e histórico 7d
-    │   ├── FinnhubAdapter.java       # Finnhub: quotes y velas diarias
-    │   ├── NewsAdapter.java          # NewsAPI con fallback HN Algolia
-    │   └── *Quote/*Rates/*Feed/*Candles.java # respuestas crudas de proveedores
+    │   └── DashboardCacheService.java
+    ├── adapter/                      # DolarApi, Frankfurter*, CoinGecko, Finnhub, News
     ├── mapper/
-    │   ├── CurrencyMapper.java       # MapStruct: dólar y FX
-    │   ├── CryptoMapper.java         # MapStruct/JsonNode: cripto
-    │   ├── EquityMapper.java         # MapStruct: quotes y velas
-    │   └── NewsMapper.java           # MapStruct: NewsAPI y HN
     ├── mock/
-    │   └── DashboardMockFixtures.java # fixtures estáticas del modo mock
+    │   └── DashboardMockFixtures.java
     └── dto/
-        ├── DashboardResponse.java
-        ├── DolarResponse.java
-        ├── FxRateResponse.java
-        ├── CryptoResponse.java
-        ├── CryptoPricePoint.java
-        ├── EquityQuoteResponse.java
-        ├── CandleResponse.java
-        ├── OhlcPoint.java
-        └── NewsArticleResponse.java
+        ├── SummaryResponse.java      # contrato público H3
+        ├── ChartsResponse.java
+        ├── NewsResponse.java
+        ├── FxSection / CryptoSection / EquitiesSection / ...
+        └── (DTOs internos de adapters: DolarResponse, CryptoResponse, …)
 ```
 
-Cada capa tiene su subpaquete; no hay paquete plano. El módulo `dashboard` no tiene `repository` ni
-`entity` porque no persiste datos: la capa de almacenamiento es `cache/` y la de integración es `adapter/`.
+\* Frankfurter se conserva en el código pero **no** participa de `summary` (decisión H3).
 
 ## Responsabilidades por capa
 
 | Capa | Clase | Responsabilidad | No hace |
 |---|---|---|---|
-| Controller | `DashboardController` | Recibe HTTP, devuelve `200` con `DashboardResponse` | Reglas de negocio, llamadas a proveedores ni mapeo |
-| Service | `DashboardService` | Lanza las ocho consultas en paralelo, aplica caché, acumula `degraded` y arma la respuesta | Conocer HTTP ni detalles de cada proveedor |
-| Cache | `DashboardCacheService` | Guarda por clave la última lista exitosa con TTL; si el proveedor falla y hay entrada previa, la sirve y marca `stale` | Reglas de negocio |
-| Adapter | `DolarApiAdapter`, `FrankfurterAdapter`, `CoinGeckoAdapter`, `FinnhubAdapter`, `NewsAdapter` | Consultan su proveedor con `WebClient`, validan la respuesta y la convierten a DTO | Cachear secciones (salvo la caché interna de CoinGecko) ni decidir degraded |
-| Mapper | `CurrencyMapper`, `CryptoMapper`, `EquityMapper`, `NewsMapper` | Convierten respuestas crudas a DTO (MapStruct o `JsonNode`) | Llamadas HTTP ni reglas de sección |
-| Mock | `DashboardMockFixtures` | Devuelve listas fijas cuando el modo mock está activo o falta la key de Finnhub | Llamadas externas |
-| DTO | `DashboardResponse` y DTOs de sección | Contrato HTTP de salida (records inmutables) | Lógica de negocio |
+| Controller | `DashboardController` | HTTP + OpenAPI; delega a services | Orquestar proveedores |
+| Service | `DashboardService`, `ChartsService`, `NewsService` | Agregación, validación de params, `degraded` | Conocer HTTP |
+| Security | `JwtAuthInterceptor` | Exige Bearer JWT válido en `/api/v1/dashboard/**` | Emitir tokens (eso es auth-service) |
+| Cache | `DashboardCacheService` | TTL + última respuesta buena | Reglas de negocio |
+| Adapter | `*Adapter` | WebClient + validación + mapeo a DTO interno | Decidir el contrato público |
+| DTO público | `SummaryResponse`, `ChartsResponse`, `NewsResponse` | Contrato HTTP H3 | Lógica de negocio |
 
-## Modelo de respuesta
-
-`DashboardResponse` es un `record` con ocho listas:
+## Modelo de respuesta (contrato H3)
 
 ```java
-public record DashboardResponse(
-        List<DolarResponse> dolar,
-        List<FxRateResponse> fx,
-        List<CryptoResponse> crypto,
-        List<CryptoPricePoint> cryptoHistory,
-        List<EquityQuoteResponse> equities,
-        List<CandleResponse> equityCandles,
-        List<NewsArticleResponse> news,
-        List<String> degraded) {
-}
+SummaryResponse(brand, generatedAt, FxSection fx, CryptoSection crypto, EquitiesSection equities, List<String> degraded)
+ChartsResponse(asset, range, List<ChartPoint> points, boolean degraded)
+NewsResponse(List<NewsArticleResponse> items, boolean degraded)
 ```
 
-| Sección | DTO | Campos |
-|---|---|---|
-| `dolar` | `DolarResponse` | `tipo`, `compra`, `venta` |
-| `fx` | `FxRateResponse` | `from`, `to`, `rate` |
-| `crypto` | `CryptoResponse` | `id`, `symbol`, `priceUsd`, `change24h` |
-| `cryptoHistory` | `CryptoPricePoint` | `timestamp` (ISO-8601 UTC), `priceUsd` |
-| `equities` | `EquityQuoteResponse` | `ticker`, `price`, `currency` |
-| `equityCandles` | `CandleResponse` / `OhlcPoint` | `ticker`, `ohlcPoints[]` con `t`, `o`, `h`, `l`, `c`, `v` |
-| `news` | `NewsArticleResponse` | `id`, `title`, `summary`, `source`, `publishedAt`, `url`, `topic` |
-| `degraded` | `List<String>` | nombres de sección sin datos frescos |
+- Público `fx` = dólar ARS (`usd_oficial` / `usd_blue`), no Frankfurter.
+- `CryptoSection` / `EquitiesSection` se serializan como mapas planos (`@JsonValue`), sin wrapper `values`.
+- `degraded` en summary: subconjunto de `fx`, `crypto`, `equities`. En charts/news: boolean.
 
-Reglas del contrato:
-
-- Ninguna lista es `null`; si no hay datos, es una lista vacía.
-- `degraded` nunca es `null`; vacío cuando todas las secciones tienen datos frescos.
-- `cryptoHistory` contiene primero la serie de BTC y después la de ETH. Si falla una o ambas, la sección
-  se informa una sola vez en `degraded`.
-- Las cotizaciones se devuelven normalizadas: dólar oficial y blue, USD→EUR y USD→BRL, BTC y ETH,
-  AAPL/MSFT/SPY.
+El DTO plano `DashboardResponse` y `GET /api/v1/dashboard` **fueron retirados**.
 
 ## Flujo de una petición
 
 ```text
-GET /api/v1/dashboard
-  → DashboardController.getDashboard()
-      → DashboardService.getDashboard()
-          por cada clave: cache.getOrFetch(clave, supplier del adapter) en un hilo virtual
-            dolar            → DolarApiAdapter.fetchDolar()
-            fx               → FrankfurterAdapter.fetchFx()
-            crypto           → CoinGeckoAdapter.fetchPrices()
-            cryptoHistory:bitcoin  → CoinGeckoAdapter.fetchHistory("bitcoin")
-            cryptoHistory:ethereum → CoinGeckoAdapter.fetchHistory("ethereum")
-            equities         → FinnhubAdapter.fetchQuotes()
-            equityCandles    → FinnhubAdapter.fetchCandles()
-            news             → NewsAdapter.fetchNews()
-          CompletableFuture.allOf(...).join()
-          cada fallo se convierte en lista vacía + stale=true (no propaga excepción)
-          degraded = claves con stale=true, sin duplicados y en orden de sección
-      ← DashboardResponse
-  ← 200 OK application/json
+GET /api/v1/dashboard/summary|charts|news
+  → JwtAuthInterceptor (401 si falta/inválido)
+  → DashboardController
+      → DashboardService.getSummary()     // dolar + crypto + equities en paralelo
+      → ChartsService.getCharts(asset, range)
+      → NewsService.getNews(topic, limit)
+  ← 200 + SummaryResponse | ChartsResponse | NewsResponse
 ```
 
-Puntos clave de la orquestación:
-
-- Las consultas son **bloqueantes dentro de cada adaptador** (`WebClient...block()`), pero se ejecutan en
-  paralelo en un `ExecutorService` de hilos virtuales (`DashboardExecutorConfig`). El tiempo total se
-  aproxima al del proveedor más lento, no a la suma.
-- `DashboardService.fetch` captura cualquier fallo con `exceptionally` y lo transforma en
-  `CacheResult(List.of(), true)`: un proveedor caído nunca produce un 5xx.
-- `degraded` se calcula a partir del flag `stale` de la caché. Si no había entrada previa, la lista de la
-  sección queda vacía; si había, se sirve la copia anterior.
-- Solo un fallo inesperado fuera de las consultas (por ejemplo, en la construcción de la respuesta) llega
-  al `GlobalExceptionHandler` y produce `500 INTERNAL_ERROR`.
-
-### Caché
-
-`DashboardCacheService` usa un `ConcurrentHashMap<String, CacheEntry>`:
-
-- Clave por recurso: `dolar`, `fx`, `crypto`, `cryptoHistory:bitcoin`, `cryptoHistory:ethereum`,
-  `equities`, `equityCandles`, `news`.
-- TTL: `DASHBOARD_CACHE_TTL_SECONDS` (60 s por defecto). Para claves que empiezan con `crypto` se aplica
-  un mínimo de 60 s, para respetar el límite de CoinGecko.
-- Dentro del TTL devuelve la lista sin llamar al proveedor.
-- Si el TTL venció y el proveedor responde, reemplaza la entrada.
-- Si el TTL venció y el proveedor falla, devuelve la entrada anterior con `stale=true`.
-- Si falla y no hay entrada previa, propaga el fallo a `DashboardService`, que lo traduce a lista vacía y
-  `degraded`.
-
-`CoinGeckoAdapter` además mantiene una caché propia por recurso (`crypto`, `cryptoHistory:bitcoin`,
-`cryptoHistory:ethereum`) con el mismo mínimo de 60 s. Es una defensa adicional para no exceder la cuota
-del proveedor; la caché de sección sigue siendo la de `DashboardCacheService`.
+Un proveedor caído no produce 5xx: se marca `degraded` y se sirve stale o vacío. Solo un fallo
+inesperado de orquestación llega al `GlobalExceptionHandler` como `500 INTERNAL_ERROR`.
 
 ### Modo mock
 
-Con `DASHBOARD_USE_MOCK=true` cada adaptador devuelve `DashboardMockFixtures` antes de cualquier llamada
-HTTP. El servicio sigue pasando por la caché y por el agregador, pero `degraded` queda vacío. Los valores
-son ficticios y estáticos; no son cotizaciones reales. `FinnhubAdapter` también usa las fixtures cuando
-`FINNHUB_API_KEY` está vacía, aunque el modo mock esté apagado.
+Con `DASHBOARD_USE_MOCK=true` los adapters usan `DashboardMockFixtures`. `FINNHUB_API_KEY` /
+`NEWS_API_KEY` siguen siendo opcionales (fixtures / HN Algolia).
 
-## Proveedores
+## Proveedores usados por endpoint
 
-| Sección | Adaptador | Llamada | Autenticación | Fallback |
-|---|---|---|---|---|
-| `dolar` | `DolarApiAdapter` | `GET /v1/dolares` | ninguna | sin fallback; degrada |
-| `fx` | `FrankfurterAdapter` | `GET /latest?from=USD&to=EUR,BRL` | ninguna | sin fallback; degrada |
-| `crypto` | `CoinGeckoAdapter` | `GET /api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true` | ninguna | sin fallback; degrada |
-| `cryptoHistory` | `CoinGeckoAdapter` | `GET /api/v3/coins/{id}/market_chart?vs_currency=usd&days=7` | ninguna | sin fallback; degrada |
-| `equities` | `FinnhubAdapter` | `GET /api/v1/quote?symbol=...&token=...` | `FINNHUB_API_KEY` en query | fixtures si no hay key |
-| `equityCandles` | `FinnhubAdapter` | `GET /api/v1/stock/candle?resolution=D&...` | `FINNHUB_API_KEY` en query | fixtures si no hay key |
-| `news` | `NewsAdapter` | `GET /v2/everything?...` | `NEWS_API_KEY` en query | HN Algolia `GET /api/v1/search`; si ambos fallan, degrada |
-
-- Cada `WebClient` tiene `base-url` y `timeout-seconds` configurables por proveedor. El timeout se aplica
-  a conexión y a respuesta, y además cada llamada tiene un `timeout` de 5 s.
-- Los adaptadores validan datos incompletos (por ejemplo, cotización sin compra/venta, tasas faltantes,
-  velas con arrays de distinto tamaño) y lanzan excepción para degradar la sección.
-- `NewsAdapter` pide hasta 8 artículos, en inglés y ordenados por fecha; sin `NEWS_API_KEY` va directo a
-  HN Algolia, y con key intenta NewsAPI y cae a HN ante cualquier error.
-- `FinnhubAdapter` consulta AAPL, MSFT y SPY; las velas cubren los últimos siete días con resolución
-  diaria.
-
-Limitación conocida: no se verificaron llamadas reales a Finnhub con clave ni la disponibilidad de SPY en
-el plan free desde este entorno. SPY se conserva como ETF de referencia y los tests usan MockWebServer.
+| Endpoint | Fuentes |
+|---|---|
+| `summary` | DolarApi (`fx`), CoinGecko (`crypto`), Finnhub (`equities`) |
+| `charts` | CoinGecko (BTC/ETH) o Finnhub candles (AAPL/MSFT/SPY) |
+| `news` | NewsAPI → fallback HN Algolia |
 
 ## Endpoints
 
-| Método | Ruta | Request | Respuesta OK | Errores |
+| Método | Ruta | Auth | Respuesta OK | Errores |
 |---|---|---|---|---|
-| GET | `/api/v1/dashboard` | ninguno | `200` + `DashboardResponse` | `500 INTERNAL_ERROR` |
-| GET | `/actuator/health` | — | `200` + `{"status":"UP","groups":[...]}` | — |
+| GET | `/api/v1/dashboard/summary` | Bearer JWT | `200` `SummaryResponse` | `401`, `500` |
+| GET | `/api/v1/dashboard/charts` | Bearer JWT | `200` `ChartsResponse` | `400`, `401`, `500` |
+| GET | `/api/v1/dashboard/news` | Bearer JWT | `200` `NewsResponse` | `400`, `401`, `500` |
+| GET | `/actuator/health` | — | `200` | — |
 | GET | `/actuator/info` | — | `200` | — |
 
-OpenAPI: `/v3/api-docs` (completo) y `/v3/api-docs/dashboard` (grupo). Swagger UI:
-`/swagger-ui.html`. La copia versionada se genera en `delivery/openapi/dashboard-service/openapi.json` y
-`.yaml` para no reemplazar el contrato del auth-service, que usa `delivery/openapi/` directamente.
+OpenAPI: `/v3/api-docs` y `/v3/api-docs/dashboard`. Copia versionada:
+`delivery/openapi/dashboard-service/openapi.json` y `.yaml`.
 
 ## Contrato de error
 
-Implementado en `exception/GlobalExceptionHandler` (`@RestControllerAdvice`). El mismo JSON para todas las
-respuestas de error:
+Mismo JSON (`code`, `message`, `details`, `timestamp`) para toda la API. Códigos: `VALIDATION_ERROR`,
+`BAD_REQUEST`, `NOT_FOUND`, `CONFLICT`, `UNAUTHORIZED` (401), `INTERNAL_ERROR`. Los fallos de proveedores
+**no** son errores HTTP: van en `degraded`.
 
-```json
-{
-  "code": "INTERNAL_ERROR",
-  "message": "Error interno",
-  "details": [],
-  "timestamp": "2026-10-22T10:05:00Z"
-}
-```
+## Configuración relevante
 
-| HTTP | `code` | Excepción / caso |
+| Variable | Obligatorio | Notas |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | `MethodArgumentNotValidException`, `ConstraintViolationException` |
-| 400 | `BAD_REQUEST` | `IllegalArgumentException`, `HttpMessageNotReadableException`, `MethodArgumentTypeMismatchException`, `MissingServletRequestParameterException` |
-| 404 | `NOT_FOUND` | `NotFoundException` |
-| 409 | `CONFLICT` | `ConflictException` |
-| 500 | `INTERNAL_ERROR` | Cualquier otra `Exception`; mensaje genérico |
+| `JWT_SECRET` | **sí** | Sin default; ≥ 32 bytes; igual que auth-service |
+| `DASHBOARD_USE_MOCK` | no | `false` por defecto |
+| `FINNHUB_API_KEY` / `NEWS_API_KEY` | no | Opcionales (fixtures / HN) |
+| `DASHBOARD_CACHE_TTL_SECONDS` | no | default `60` |
 
-El endpoint del dashboard no recibe body ni parámetros, por lo que en el uso normal solo aplica `500`.
-Los fallos de proveedores **no** son errores HTTP: se informan en `degraded`. `details` nunca es `null`;
-el stacktrace y los mensajes internos quedan en el log. `server.error.include-stacktrace` e
-`include-message` están en `never`.
-
-## Configuración
-
-```yaml
-spring:
-  application:
-    name: dashboard-service
-  main:
-    web-application-type: servlet
-
-server:
-  port: ${PORT:8081}
-  error:
-    include-stacktrace: never
-    include-message: never
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-  endpoint:
-    health:
-      probes:
-        enabled: true
-
-springdoc:
-  api-docs.path: /v3/api-docs
-  swagger-ui.path: /swagger-ui.html
-
-dashboard:
-  cache:
-    ttl-seconds: ${DASHBOARD_CACHE_TTL_SECONDS:60}
-  use-mock: ${DASHBOARD_USE_MOCK:false}
-  providers:
-    dolar-api:
-      base-url: ${DASHBOARD_DOLAR_API_BASE_URL:https://dolarapi.com}
-      timeout-seconds: ${DASHBOARD_DOLAR_API_TIMEOUT_SECONDS:5}
-    frankfurter:
-      base-url: ${DASHBOARD_FRANKFURTER_BASE_URL:https://api.frankfurter.app}
-      timeout-seconds: ${DASHBOARD_FRANKFURTER_TIMEOUT_SECONDS:5}
-    coin-gecko:
-      base-url: ${DASHBOARD_COIN_GECKO_BASE_URL:https://api.coingecko.com}
-      timeout-seconds: ${DASHBOARD_COIN_GECKO_TIMEOUT_SECONDS:5}
-    finnhub:
-      base-url: ${DASHBOARD_FINNHUB_BASE_URL:https://finnhub.io}
-      timeout-seconds: ${DASHBOARD_FINNHUB_TIMEOUT_SECONDS:5}
-      api-key: ${FINNHUB_API_KEY:}
-    news-api:
-      base-url: ${DASHBOARD_NEWS_API_BASE_URL:https://newsapi.org}
-      timeout-seconds: ${DASHBOARD_NEWS_API_TIMEOUT_SECONDS:5}
-      api-key: ${NEWS_API_KEY:}
-    hn-algolia:
-      base-url: ${DASHBOARD_HN_ALGOLIA_BASE_URL:https://hn.algolia.com}
-      timeout-seconds: ${DASHBOARD_HN_ALGOLIA_TIMEOUT_SECONDS:5}
-```
-
-Ninguna variable es obligatoria: el servicio arranca sin claves y sin base de datos. En producción,
-Swagger UI y `/v3/api-docs` se desactivan con `springdoc.swagger-ui.enabled=false` y
-`springdoc.api-docs.enabled=false` desde el entorno de despliegue (ver `delivery/devops-local.md`).
+En producción se desactivan Swagger UI y `/v3/api-docs` (ver `delivery/devops-local.md`).
 
 ## Tests y calidad
 
-| Área | Test | Enfoque |
-|---|---|---|
-| Agregación | `DashboardServiceTest` | Paralelismo, degraded y respuesta agregada |
-| Caché | `DashboardCacheServiceTest` | TTL, reutilización y stale |
-| Adaptadores | `DolarApiAdapterTest`, `FrankfurterAdapterTest`, `CoinGeckoAdapterTest`, `FinnhubAdapterTest`, `NewsAdapterTest` | MockWebServer: mapeo, errores, timeouts, fallback y fixtures |
-| Controller | `DashboardControllerTest` | `@WebMvcTest`: 200 y contrato |
-| Integración | `DashboardMockIntegrationTest` | `@SpringBootTest` en modo mock |
-| Contrato de error | `ErrorResponseTest`, `ErrorContractHttpTest` | Mapeo HTTP y JSON |
-| Configuración | `DashboardApplicationTest`, `WebClientConfigTest`, `OpenApiConfigTest` | Arranque, timeouts y metadatos OpenAPI |
-| OpenAPI | `OpenApiExportTest` | Publicación y export a `delivery/openapi/dashboard-service/` |
+| Área | Test |
+|---|---|
+| Summary / charts / news | `DashboardServiceTest`, `ChartsService*`, `NewsService*`, `DashboardControllerTest` |
+| JWT | `JwtHttpIntegrationTest` |
+| Adaptadores | `*AdapterTest` (MockWebServer) |
+| OpenAPI | `OpenApiExportTest` (assert: sin `/api/v1/dashboard` ni `DashboardResponse`) |
 
-JaCoCo exige 80 % de cobertura de líneas en `verify`; solo excluye `DashboardApplication`. Comando de
-cierre desde `services/dashboard-service`: `.\mvnw.cmd -q -B verify` (Windows) o `./mvnw -q -B verify`
-(Linux/macOS). No requiere Docker ni claves reales.
+JaCoCo 80 %. Cierre: desde `services/dashboard-service`, `.\mvnw.cmd -q -B verify`.

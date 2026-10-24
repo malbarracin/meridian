@@ -1,0 +1,27 @@
+meta {
+  name: Charts (JWT)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/dashboard/charts?asset=BTC&range=7d
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.asset: isString
+  res.body.range: isString
+  res.body.points: isArray
+  res.body.degraded: isBoolean
+}
+
+docs {
+  Serie histórica protegida por JWT. Activos soportados: BTC, ETH, AAPL, MSFT, SPY. range=7d.
+}

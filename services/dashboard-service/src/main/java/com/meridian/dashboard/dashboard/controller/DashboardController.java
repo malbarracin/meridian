@@ -30,10 +30,10 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Expone el resumen de dólar ARS, criptomonedas y bolsa protegido por JWT.
- *
- * <p>Las secciones se resuelven de forma independiente: si un proveedor falla, el endpoint responde
- * igualmente {@code 200} y lista la sección afectada en {@code degraded}.</p>
+ * Endpoints del dashboard protegidos por JWT (emitidos por auth-service).
+ * <p>Expone tres endpoints: resumen agregado, series históricas y noticias IA/tecnología.
+ * Las secciones se resuelven de forma independiente: si un proveedor falla, se responde {@code 200}
+ * con la sección afectada marcada en {@code degraded} (lista para summary, booleano para charts/news).</p>
  */
 @RestController
 @RequestMapping("/api/v1/dashboard")
@@ -47,6 +47,10 @@ public class DashboardController {
     private final ChartsService chartsService;
 
     /**
+     * Obtiene noticias normalizadas de IA/tecnología.
+     * <p>Protegido por JWT. Usa NewsAPI con fallback a HN Algolia; si ambas fuentes fallan,
+     * devuelve {@code 200} con {@code items} vacío o stale y {@code degraded=true}.</p>
+     *
      * @param topic tópico IA/tecnología, por defecto ai-tech
      * @param limit máximo de artículos entre uno y ocho
      * @return noticias disponibles con indicador de degradación
@@ -72,6 +76,11 @@ public class DashboardController {
     }
 
     /**
+     * Obtiene la serie histórica de un activo soportado.
+     * <p>Protegido por JWT. Soporta BTC, ETH, AAPL, MSFT, SPY con rango {@code 7d}.
+     * Si el proveedor falla sin caché fresca, devuelve {@code 200} con serie stale o vacía y
+     * {@code degraded=true}.</p>
+     *
      * @param asset activo soportado obligatorio
      * @param range ventana opcional, únicamente 7d
      * @return serie histórica en USD y estado de degradación del proveedor
@@ -98,10 +107,15 @@ public class DashboardController {
     }
 
     /**
-     * Devuelve las tres secciones del resumen en una sola respuesta.
+     * Devuelve el resumen agregado del dashboard.
+     * <p>Protegido por JWT. Agrega dólar ARS ({@code fx.quotes.usd_oficial/usd_blue}), criptomonedas
+     * ({@code crypto.values.bitcoin/ethereum}) y bolsa ({@code equities.values.AAPL/MSFT/SPY}).
+     * Los fallos de proveedores individuales se informan en {@code degraded} sin generar {@code 5xx}.
+     * Solo un fallo inesperado de la orquestación devuelve {@code 500}.</p>
      *
      * @return {@code 200} con los datos disponibles y la lista de secciones sin datos frescos;
-     *         {@code 500} con el contrato de error si falla la orquestación completa
+     *         {@code 401} si el JWT es ausente o inválido; {@code 500} con el contrato de error
+     *         si falla la orquestación completa
      */
     @GetMapping("/summary")
     @SecurityRequirement(name = "bearerAuth")

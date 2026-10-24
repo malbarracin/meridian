@@ -212,24 +212,33 @@ components:
           type: number
     SummaryResponse:
       type: object
+      description: Resumen de mercados protegido por JWT
       properties:
         brand:
           type: string
+          description: Marca del producto
+          example: Meridian
         generatedAt:
           type: string
           format: date-time
+          description: Momento de generación en UTC
+          example: 2026-10-22T10:05:00Z
         fx:
           $ref: "#/components/schemas/FxSection"
+          description: Dólar ARS (oficial/blue); no es Frankfurter
         crypto:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/CryptoQuote"
+          description: Precios de criptomonedas indexados por id
         equities:
           type: object
           additionalProperties:
             $ref: "#/components/schemas/EquityQuote"
+          description: Cotizaciones bursátiles indexadas por ticker
         degraded:
           type: array
+          description: "Secciones sin datos frescos: fx, crypto y/o equities"
           items:
             type: string
     NewsArticleResponse:
@@ -267,13 +276,17 @@ components:
           example: ai-tech
     NewsResponse:
       type: object
+      description: Noticias IA/tecnología protegidas por JWT
       properties:
         items:
           type: array
+          description: Artículos normalizados (hasta limit)
           items:
             $ref: "#/components/schemas/NewsArticleResponse"
         degraded:
           type: boolean
+          description: true solo si fallan NewsAPI y HN Algolia sin caché fresca
+          example: false
     ChartPoint:
       type: object
       properties:
@@ -358,28 +371,28 @@ components:
         generatedAt: 2026-10-22T10:05:00Z
         fx:
           quotes:
-            usd_blue:
-              compra: 1200.0
-              venta: 1220.0
             usd_oficial:
               compra: 1000.0
               venta: 1040.0
+            usd_blue:
+              compra: 1200.0
+              venta: 1220.0
         crypto:
-          ethereum:
-            priceUsd: 3500.0
-            change24hPct: -1.2
           bitcoin:
             priceUsd: 67000.0
             change24hPct: 2.5
+          ethereum:
+            priceUsd: 3500.0
+            change24hPct: -1.2
         equities:
           AAPL:
             price: 175
             currency: USD
-          SPY:
-            price: 450.0
-            currency: USD
           MSFT:
             price: 415
+            currency: USD
+          SPY:
+            price: 450.0
             currency: USD
         degraded: []
     InternalError:

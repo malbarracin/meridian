@@ -4,7 +4,15 @@ import java.util.List;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Serie histórica; degraded indica que no se pudo obtener una serie fresca del proveedor. */
+/**
+ * Serie histórica para graficar la evolución de un activo.
+ * <p>Protegido por JWT. {@code degraded} indica que no se pudo obtener una serie fresca del proveedor.</p>
+ *
+ * @param asset activo normalizado
+ * @param range ventana histórica
+ * @param points puntos ordenados por fecha
+ * @param degraded indica fallo del proveedor sin caché fresca
+ */
 public record ChartsResponse(
         @Schema(description = "Activo normalizado", example = "BTC") String asset,
         @Schema(description = "Ventana histórica", example = "7d") String range,
