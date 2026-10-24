@@ -9,10 +9,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.meridian.dashboard.dashboard.dto.SummaryResponse;
+import com.meridian.dashboard.dashboard.dto.ChartsResponse;
 import com.meridian.dashboard.dashboard.dto.NewsResponse;
-import com.meridian.dashboard.dashboard.service.NewsService;
+import com.meridian.dashboard.dashboard.dto.SummaryResponse;
+import com.meridian.dashboard.dashboard.service.ChartsService;
 import com.meridian.dashboard.dashboard.service.DashboardService;
+import com.meridian.dashboard.dashboard.service.NewsService;
 import com.meridian.dashboard.exception.ErrorResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,6 +44,7 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final NewsService newsService;
+    private final ChartsService chartsService;
 
     /**
      * @param topic tópico IA/tecnología, por defecto ai-tech
@@ -53,8 +56,9 @@ public class DashboardController {
     @Operation(summary = "Obtener noticias IA/tecnología",
             description = "El fallback HN es normal. degraded solo indica el fallo de ambas fuentes.")
     @ApiResponse(responseCode = "200", description = "Noticias disponibles, frescas o stale",
-            content = @Content(schema = @Schema(implementation = NewsResponse.class),
-                    examples = @ExampleObject(ref = "#/components/examples/NewsMock")))
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = NewsResponse.class),
+                    examples = @ExampleObject(name = "modoMock", ref = "#/components/examples/NewsMock")))
     @ApiResponse(responseCode = "400", description = "Tópico o límite inválido",
             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     @ApiResponse(responseCode = "401", description = "JWT ausente, inválido o expirado",
@@ -65,6 +69,32 @@ public class DashboardController {
             @Parameter(description = "Máximo de artículos")
             @RequestParam(defaultValue = "8") @Min(1) @Max(8) Integer limit) {
         return newsService.getNews(topic, limit);
+    }
+
+    /**
+     * @param asset activo soportado obligatorio
+     * @param range ventana opcional, únicamente 7d
+     * @return serie histórica en USD y estado de degradación del proveedor
+     */
+    @GetMapping("/charts")
+    @SecurityRequirement(name = "bearerAuth")
+    @Operation(summary = "Obtener la serie histórica de un activo",
+            description = "Últimos siete días; si falla el proveedor devuelve datos stale o puntos vacíos.")
+    @ApiResponse(responseCode = "200", description = "Serie histórica disponible",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                    schema = @Schema(implementation = ChartsResponse.class),
+                    examples = @ExampleObject(name = "modoMock", ref = "#/components/examples/ChartsMock")))
+    @ApiResponse(responseCode = "400", description = "Activo o rango no soportado",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    @ApiResponse(responseCode = "401", description = "JWT ausente, inválido o expirado",
+            content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    public ChartsResponse getCharts(
+            @Parameter(description = "Activo soportado", required = true,
+                    schema = @Schema(allowableValues = {"BTC", "ETH", "AAPL", "MSFT", "SPY"}))
+            @RequestParam(name = "asset") String asset,
+            @Parameter(description = "Ventana histórica", schema = @Schema(allowableValues = "7d"))
+            @RequestParam(name = "range", required = false) String range) {
+        return chartsService.getCharts(asset, range);
     }
 
     /**

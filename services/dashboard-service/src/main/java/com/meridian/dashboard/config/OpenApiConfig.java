@@ -11,8 +11,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.meridian.dashboard.dashboard.dto.SummaryResponse;
+import com.meridian.dashboard.dashboard.dto.ChartsResponse;
 import com.meridian.dashboard.dashboard.dto.NewsResponse;
+import com.meridian.dashboard.dashboard.dto.SummaryResponse;
 import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
 
 import io.swagger.v3.oas.models.Components;
@@ -64,6 +65,10 @@ public class OpenApiConfig {
                 .addExamples("NewsMock", new Example()
                         .summary("Noticias en modo mock")
                         .value(OBJECT_MAPPER.valueToTree(new NewsResponse(DashboardMockFixtures.getNews(), false))))
+                .addExamples("ChartsMock", new Example()
+                        .summary("Serie BTC en modo mock")
+                        .value(OBJECT_MAPPER.valueToTree(new ChartsResponse("BTC", "7d",
+                                DashboardMockFixtures.getChartPoints("BTC"), false))))
                 .addExamples("SummaryMock", new Example()
                         .summary("Dashboard en modo mock")
                         .description("Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son "
