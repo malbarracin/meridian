@@ -1,6 +1,7 @@
 package com.meridian.dashboard.dashboard.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -9,9 +10,15 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.meridian.dashboard.dashboard.dto.DashboardResponse;
+import com.meridian.dashboard.dashboard.dto.ChartsResponse;
+import com.meridian.dashboard.dashboard.dto.FxSection;
+import com.meridian.dashboard.dashboard.dto.NewsResponse;
+import com.meridian.dashboard.dashboard.dto.SummaryResponse;
 import com.meridian.dashboard.dashboard.mock.DashboardMockFixtures;
+import com.meridian.dashboard.dashboard.service.ChartsService;
 import com.meridian.dashboard.dashboard.service.DashboardService;
+import com.meridian.dashboard.dashboard.service.NewsService;
+import com.meridian.dashboard.exception.UnsupportedParameterException;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -22,50 +29,232 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("Endpoint del dashboard")
 class DashboardControllerTest {
 
+    private static String bearerToken() {
+        return "Bearer " + com.meridian.dashboard.security.JwtValidatorTest.token(
+                com.meridian.dashboard.security.JwtValidatorTest.SECRET,
+                java.time.Instant.now().plusSeconds(300));
+    }
+
     @Autowired private MockMvc mockMvc;
     @MockitoBean private DashboardService service;
+    @MockitoBean private NewsService newsService;
+    @MockitoBean private ChartsService chartsService;
+
+    @Test
+    @DisplayName("Noticias devuelve los campos normalizados con JWT")
+    void devuelveNoticias() throws Exception {
+        when(newsService.getNews("ai-tech", 8)).thenReturn(
+                new NewsResponse(DashboardMockFixtures.getNews(), false));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                        .param("topic", "ai-tech").param("limit", "8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].id").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].title").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].summary").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].source").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].publishedAt").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].url").isNotEmpty())
+                .andExpect(jsonPath("$.items[0].topic").value("ai-tech"))
+                .andExpect(jsonPath("$.degraded").value(false));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Noticias exige JWT y rechaza parámetros inválidos con contrato estándar")
+    void rechazaNoticiasInvalidas() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/news"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        when(newsService.getNews("sports", 8)).thenThrow(
+                new UnsupportedParameterException("topic"));
+        mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                        .param("topic", "sports"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("topic"));
+        for (String limit : List.of("0", "9", "-1")) {
+            mockMvc.perform(get("/api/v1/dashboard/news").header("Authorization", bearerToken())
+                            .param("limit", limit))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.details[0].field").value("limit"))
+                    .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        }
+    }
+
+    @Test
+    @DisplayName("Charts BTC con JWT válido responde 200 con serie de 7d")
+    void devuelveChartsBtcConJwt() throws Exception {
+        when(chartsService.getCharts("BTC", "7d")).thenReturn(
+                new ChartsResponse("BTC", "7d",
+                        DashboardMockFixtures.getChartPoints("BTC"), false));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC").param("range", "7d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value("BTC"))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.points[0].t").isNotEmpty())
+                .andExpect(jsonPath("$.points[0].v").isNumber())
+                .andExpect(jsonPath("$.points.length()").value(8))
+                .andExpect(jsonPath("$.degraded").value(false));
+    }
+
+    @Test
+    @DisplayName("Charts AAPL con JWT válido responde 200 con puntos graficables")
+    void devuelveChartsEquityConJwt() throws Exception {
+        when(chartsService.getCharts("AAPL", "7d")).thenReturn(
+                new ChartsResponse("AAPL", "7d",
+                        DashboardMockFixtures.getChartPoints("AAPL"), false));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "AAPL").param("range", "7d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value("AAPL"))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.points").isArray())
+                .andExpect(jsonPath("$.points[0].t").isNotEmpty())
+                .andExpect(jsonPath("$.points[0].v").isNumber())
+                .andExpect(jsonPath("$.degraded").value(false));
+    }
+
+    @Test
+    @DisplayName("Charts sin JWT válido responde 401 con contrato UNAUTHORIZED")
+    void rechazaChartsSinJwt() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC")
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        org.mockito.Mockito.verifyNoInteractions(chartsService);
+    }
+
+    @Test
+    @DisplayName("Charts con proveedor degradado responde 200 y degraded true")
+    void devuelveChartsDegraded() throws Exception {
+        when(chartsService.getCharts("ETH", "7d")).thenReturn(
+                new ChartsResponse("ETH", "7d", List.of(), true));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "ETH").param("range", "7d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value("ETH"))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.degraded").value(true))
+                .andExpect(jsonPath("$.points").isArray());
+    }
+
+    @Test
+    @DisplayName("Charts devuelve el contrato de validación para asset y range inválidos")
+    void rechazaParametrosCharts() throws Exception {
+        when(chartsService.getCharts("DOGE", null)).thenThrow(
+                new UnsupportedParameterException("asset"));
+        when(chartsService.getCharts("BTC", "30d")).thenThrow(
+                new UnsupportedParameterException("range"));
+
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "DOGE")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.details[0].field").value("asset"))
+                .andExpect(jsonPath("$.details[0].message").isNotEmpty())
+                .andExpect(jsonPath("$.timestamp").isNotEmpty());
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", "BTC").param("range", "30d")
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details[0].field").value("range"));
+    }
 
     @Test
     @DisplayName("Devuelve 200 con todas las secciones y degraded vacío")
     void devuelveDashboard() throws Exception {
-        when(service.getDashboard()).thenReturn(new DashboardResponse(
-                DashboardMockFixtures.getDolar(), DashboardMockFixtures.getFx(),
-                DashboardMockFixtures.getCrypto(), DashboardMockFixtures.getCryptoHistory(),
-                DashboardMockFixtures.getEquities(), DashboardMockFixtures.getEquityCandles(),
-                DashboardMockFixtures.getNews(), List.of()));
+        when(service.getSummary()).thenReturn(new SummaryResponse(
+                "Meridian", java.time.Instant.now(), DashboardMockFixtures.getSummaryFx(),
+                DashboardMockFixtures.getSummaryCrypto(), DashboardMockFixtures.getSummaryEquities(), List.of()));
 
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dolar[0].tipo").value("oficial"))
-                .andExpect(jsonPath("$.fx").isNotEmpty())
-                .andExpect(jsonPath("$.crypto").isNotEmpty())
-                .andExpect(jsonPath("$.cryptoHistory").isNotEmpty())
-                .andExpect(jsonPath("$.equities").isNotEmpty())
-                .andExpect(jsonPath("$.equityCandles").isNotEmpty())
-                .andExpect(jsonPath("$.news").isNotEmpty())
+                .andExpect(jsonPath("$.brand").value("Meridian"))
+                .andExpect(jsonPath("$.generatedAt").isNotEmpty())
+                .andExpect(jsonPath("$.fx.quotes.usd_oficial.compra").value(1000))
+                .andExpect(jsonPath("$.fx.quotes.usd_oficial.venta").value(1040))
+                .andExpect(jsonPath("$.fx.quotes.usd_blue.compra").value(1200))
+                .andExpect(jsonPath("$.fx.quotes.usd_blue.venta").value(1220))
+                .andExpect(jsonPath("$.crypto.bitcoin.priceUsd").value(67000))
+                .andExpect(jsonPath("$.crypto.bitcoin.change24hPct").value(2.5))
+                .andExpect(jsonPath("$.crypto.ethereum.priceUsd").value(3500))
+                .andExpect(jsonPath("$.crypto.ethereum.change24hPct").value(-1.2))
+                .andExpect(jsonPath("$.equities.AAPL.price").value(175))
+                .andExpect(jsonPath("$.equities.AAPL.currency").value("USD"))
+                .andExpect(jsonPath("$.equities.MSFT.price").value(415))
+                .andExpect(jsonPath("$.equities.MSFT.currency").value("USD"))
+                .andExpect(jsonPath("$.equities.SPY.price").value(450))
+                .andExpect(jsonPath("$.equities.SPY.currency").value("USD"))
+                .andExpect(jsonPath("$.activeUsers").doesNotExist())
+                .andExpect(jsonPath("$.sessionsToday").doesNotExist())
+                .andExpect(jsonPath("$.errors").doesNotExist())
                 .andExpect(jsonPath("$.degraded").isEmpty());
     }
 
     @Test
     @DisplayName("Devuelve 200 con secciones vacías y degraded parcial")
     void devuelveDegradedParcial() throws Exception {
-        when(service.getDashboard()).thenReturn(new DashboardResponse(
-                List.of(), DashboardMockFixtures.getFx(), DashboardMockFixtures.getCrypto(),
-                List.of(), List.of(), List.of(), List.of(), List.of("dolar", "news")));
+        when(service.getSummary()).thenReturn(new SummaryResponse(
+                "Meridian", java.time.Instant.now(), new FxSection(Map.of()),
+                DashboardMockFixtures.getSummaryCrypto(), DashboardMockFixtures.getSummaryEquities(), List.of("fx")));
 
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dolar").isEmpty())
+                .andExpect(jsonPath("$.fx.quotes").isEmpty())
                 .andExpect(jsonPath("$.crypto").isNotEmpty())
-                .andExpect(jsonPath("$.degraded[0]").value("dolar"))
-                .andExpect(jsonPath("$.degraded[1]").value("news"));
+                .andExpect(jsonPath("$.degraded[0]").value("fx"))
+                .andExpect(jsonPath("$.degraded.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("Rechaza JWT ausente, inválido o expirado sin datos de mercado")
+    void rechazaCredenciales() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/summary"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.fx").doesNotExist())
+                .andExpect(jsonPath("$.crypto").doesNotExist())
+                .andExpect(jsonPath("$.equities").doesNotExist());
+        for (String authorization : List.of("", "Bearer invalid", "Bearer "
+                + com.meridian.dashboard.security.JwtValidatorTest.token(
+                        com.meridian.dashboard.security.JwtValidatorTest.SECRET,
+                        java.time.Instant.now().minusSeconds(60)))) {
+            mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", authorization))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                    .andExpect(jsonPath("$.fx").doesNotExist())
+                    .andExpect(jsonPath("$.crypto").doesNotExist())
+                    .andExpect(jsonPath("$.equities").doesNotExist());
+        }
+        org.mockito.Mockito.verifyNoInteractions(service);
+    }
+
+    @Test
+    @DisplayName("Retira la ruta anterior")
+    void retiraRutaAnterior() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard").header("Authorization", bearerToken()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        org.mockito.Mockito.verifyNoInteractions(service);
     }
 
     @Test
     @DisplayName("El handler oculta errores inesperados de orquestación")
     void manejaErrorInesperado() throws Exception {
-        when(service.getDashboard()).thenThrow(new IllegalStateException("secret"));
-        mockMvc.perform(get("/api/v1/dashboard"))
+        when(service.getSummary()).thenThrow(new IllegalStateException("secret"));
+        mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", bearerToken()))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_ERROR"))
                 .andExpect(jsonPath("$.details").isEmpty())

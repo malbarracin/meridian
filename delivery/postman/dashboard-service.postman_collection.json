@@ -1,13 +1,17 @@
 {
   "info": {
     "name": "dashboard-service",
-    "description": "Endpoints públicos del dashboard-service: salud, dashboard agregado y documentación OpenAPI. BASE_URL apunta al puerto 8081. DASHBOARD_USE_MOCK indica el modo con el que se arrancó el servicio: con true se sirven fixtures estáticas y el pedido de modo mock valida que degraded esté vacío. FINNHUB_API_KEY, NEWS_API_KEY y DASHBOARD_CACHE_TTL_SECONDS configuran el backend, no se envían como cabeceras. No usar claves reales en el repositorio.",
+    "description": "Endpoints protegidos por JWT del dashboard-service: summary, charts, news. Requiere Authorization: Bearer {{accessToken}} obtenido desde auth-service. BASE_URL apunta al puerto 8081. DASHBOARD_USE_MOCK indica el modo con el que se arrancó el servicio. JWT_SECRET obligatorio en el backend; FINNHUB_API_KEY/NEWS_API_KEY opcionales (modo mock/fallback).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "BASE_URL",
       "value": "http://localhost:8081"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
     }
   ],
   "item": [
@@ -30,7 +34,7 @@
                 "health"
               ]
             },
-            "description": "Endpoint de Actuator. Responde 200 con status UP cuando el servicio está disponible. No depende de proveedores externos."
+            "description": "Endpoint de Actuator. Responde 200 con status UP cuando el servicio está disponible."
           },
           "event": [
             {
@@ -78,26 +82,33 @@
       ]
     },
     {
-      "name": "2. Dashboard",
-      "description": "GET /api/v1/dashboard en modo mock y con proveedores reales. Ambos pedidos usan la misma ruta: el modo lo define DASHBOARD_USE_MOCK al arrancar el servicio.",
+      "name": "2. Dashboard (JWT)",
+      "description": "Endpoints protegidos por JWT. Obtener accessToken desde auth-service (login) y setearlo en variable {{accessToken}}.",
       "item": [
         {
-          "name": "Dashboard en modo mock",
+          "name": "Summary",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{BASE_URL}}/api/v1/dashboard",
+              "raw": "{{BASE_URL}}/api/v1/dashboard/summary",
               "host": [
                 "{{BASE_URL}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "dashboard"
+                "dashboard",
+                "summary"
               ]
             },
-            "description": "Devuelve todas las secciones agregadas. Ejecutar con el servicio arrancado con DASHBOARD_USE_MOCK=true y DASHBOARD_USE_MOCK=true en el entorno: entrega fixtures estáticas sin llamadas externas y degraded vacío. Responde 200 con DashboardResponse; un fallo de orquestación responde 500 INTERNAL_ERROR. Los fallos de proveedores individuales no generan 5xx."
+            "description": "Resumen agregado: dólar ARS, cripto y bolsa. Protegido por JWT."
           },
           "event": [
             {
@@ -107,33 +118,38 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "const secciones = ['dolar', 'fx', 'crypto', 'cryptoHistory', 'equities', 'equityCandles', 'news', 'degraded'];",
-                  "pm.test('incluye todas las secciones del contrato', () => secciones.forEach((clave) => pm.expect(body).to.have.property(clave)));",
-                  "pm.test('todas las secciones son arrays', () => secciones.forEach((clave) => pm.expect(body[clave]).to.be.an('array')));",
-                  "if (pm.environment.get('DASHBOARD_USE_MOCK') === 'true') {",
-                  "  pm.test('modo mock sin secciones degraded', () => pm.expect(body.degraded).to.be.empty);",
-                  "  pm.test('modo mock devuelve 16 puntos de histórico (BTC + ETH)', () => pm.expect(body.cryptoHistory).to.have.lengthOf(16));",
-                  "  pm.test('dólar mock empieza por oficial', () => pm.expect(body.dolar[0].tipo).to.eql('oficial'));",
-                  "}"
+                  "pm.test('tiene brand', () => pm.expect(body).to.have.property('brand'));",
+                  "pm.test('tiene generatedAt', () => pm.expect(body).to.have.property('generatedAt'));",
+                  "pm.test('tiene fx', () => pm.expect(body).to.have.property('fx'));",
+                  "pm.test('tiene crypto', () => pm.expect(body).to.have.property('crypto'));",
+                  "pm.test('tiene equities', () => pm.expect(body).to.have.property('equities'));",
+                  "pm.test('tiene degraded', () => pm.expect(body.degraded).to.be.an('array'));"
                 ]
               }
             }
           ],
           "response": [
             {
-              "name": "200 - dashboard con fixtures (DASHBOARD_USE_MOCK=true)",
+              "name": "200 - summary modo mock",
               "originalRequest": {
                 "method": "GET",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
                 "url": {
-                  "raw": "{{BASE_URL}}/api/v1/dashboard",
+                  "raw": "{{BASE_URL}}/api/v1/dashboard/summary",
                   "host": [
                     "{{BASE_URL}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "dashboard"
+                    "dashboard",
+                    "summary"
                   ]
                 }
               },
@@ -146,27 +162,44 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"dolar\": [\n    {\n      \"tipo\": \"oficial\",\n      \"compra\": 1000.00,\n      \"venta\": 1040.00\n    },\n    {\n      \"tipo\": \"blue\",\n      \"compra\": 1200.00,\n      \"venta\": 1220.00\n    }\n  ],\n  \"fx\": [\n    {\n      \"from\": \"USD\",\n      \"to\": \"EUR\",\n      \"rate\": 0.92\n    },\n    {\n      \"from\": \"USD\",\n      \"to\": \"BRL\",\n      \"rate\": 5.10\n    }\n  ],\n  \"crypto\": [\n    {\n      \"id\": \"bitcoin\",\n      \"symbol\": \"BTC\",\n      \"priceUsd\": 67000,\n      \"change24h\": 2.5\n    },\n    {\n      \"id\": \"ethereum\",\n      \"symbol\": \"ETH\",\n      \"priceUsd\": 3500,\n      \"change24h\": -1.2\n    }\n  ],\n  \"cryptoHistory\": [\n    { \"timestamp\": \"2026-10-15T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-16T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-17T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-18T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-19T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-20T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-21T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-22T00:00:00Z\", \"priceUsd\": 67000 },\n    { \"timestamp\": \"2026-10-15T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-16T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-17T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-18T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-19T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-20T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-21T00:00:00Z\", \"priceUsd\": 3500 },\n    { \"timestamp\": \"2026-10-22T00:00:00Z\", \"priceUsd\": 3500 }\n  ],\n  \"equities\": [\n    { \"ticker\": \"AAPL\", \"price\": 175.00, \"currency\": \"USD\" },\n    { \"ticker\": \"MSFT\", \"price\": 415.00, \"currency\": \"USD\" },\n    { \"ticker\": \"SPY\", \"price\": 450.00, \"currency\": \"USD\" }\n  ],\n  \"equityCandles\": [\n    { \"ticker\": \"AAPL\", \"ohlcPoints\": [ { \"t\": 1792627200, \"o\": 175.00, \"h\": 175.00, \"l\": 175.00, \"c\": 175.00, \"v\": 0 } ] },\n    { \"ticker\": \"MSFT\", \"ohlcPoints\": [ { \"t\": 1792627200, \"o\": 415.00, \"h\": 415.00, \"l\": 415.00, \"c\": 415.00, \"v\": 0 } ] },\n    { \"ticker\": \"SPY\", \"ohlcPoints\": [ { \"t\": 1792627200, \"o\": 450.00, \"h\": 450.00, \"l\": 450.00, \"c\": 450.00, \"v\": 0 } ] }\n  ],\n  \"news\": [\n    {\n      \"id\": \"demo-ai\",\n      \"title\": \"AI research demo\",\n      \"summary\": \"Static AI news fixture\",\n      \"source\": \"Meridian Demo\",\n      \"publishedAt\": \"2026-01-01T12:00:00Z\",\n      \"url\": \"https://example.com/demo-ai\",\n      \"topic\": \"ai-tech\"\n    },\n    {\n      \"id\": \"demo-tech\",\n      \"title\": \"Technology demo\",\n      \"summary\": \"Static technology news fixture\",\n      \"source\": \"Meridian Demo\",\n      \"publishedAt\": \"2026-01-02T12:00:00Z\",\n      \"url\": \"https://example.com/demo-tech\",\n      \"topic\": \"ai-tech\"\n    }\n  ],\n  \"degraded\": []\n}"
+              "body": "{\n  \"brand\": \"Meridian\",\n  \"generatedAt\": \"2026-10-22T10:05:00Z\",\n  \"fx\": {\n    \"quotes\": {\n      \"usd_oficial\": {\n        \"compra\": 1000,\n        \"venta\": 1040\n      },\n      \"usd_blue\": {\n        \"compra\": 1200,\n        \"venta\": 1220\n      }\n    }\n  },\n  \"crypto\": {\n    \"bitcoin\": {\n      \"priceUsd\": 67000,\n      \"change24hPct\": 2.5\n    },\n    \"ethereum\": {\n      \"priceUsd\": 3500,\n      \"change24hPct\": -1.2\n    }\n  },\n  \"equities\": {\n    \"AAPL\": {\n      \"price\": 175,\n      \"currency\": \"USD\"\n    },\n    \"MSFT\": {\n      \"price\": 415,\n      \"currency\": \"USD\"\n    },\n    \"SPY\": {\n      \"price\": 450,\n      \"currency\": \"USD\"\n    }\n  },\n  \"degraded\": []\n}"
             }
           ]
         },
         {
-          "name": "Dashboard con proveedores reales",
+          "name": "Charts",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
             "url": {
-              "raw": "{{BASE_URL}}/api/v1/dashboard",
+              "raw": "{{BASE_URL}}/api/v1/dashboard/charts?asset=BTC&range=7d",
               "host": [
                 "{{BASE_URL}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "dashboard"
+                "dashboard",
+                "charts"
+              ],
+              "query": [
+                {
+                  "key": "asset",
+                  "value": "BTC"
+                },
+                {
+                  "key": "range",
+                  "value": "7d"
+                }
               ]
             },
-            "description": "Misma ruta con DASHBOARD_USE_MOCK=false. El servicio consulta DolarApi, Frankfurter, CoinGecko, Finnhub y NewsAPI (con fallback HN Algolia). Requiere salida a internet; sin FINNHUB_API_KEY se usan fixtures de bolsa y sin NEWS_API_KEY el fallback de noticias. Un proveedor caído aparece en degraded y no cambia el 200. Los valores guardados son solo una muestra de la estructura: en ejecución real cambian."
+            "description": "Serie histórica de un activo soportado (BTC, ETH, AAPL, MSFT, SPY), protegido por JWT."
           },
           "event": [
             {
@@ -176,28 +209,46 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "const secciones = ['dolar', 'fx', 'crypto', 'cryptoHistory', 'equities', 'equityCandles', 'news', 'degraded'];",
-                  "pm.test('incluye todas las secciones del contrato', () => secciones.forEach((clave) => pm.expect(body).to.have.property(clave)));",
-                  "pm.test('degraded es un array de secciones', () => pm.expect(body.degraded).to.be.an('array'));"
+                  "pm.test('tiene asset', () => pm.expect(body).to.have.property('asset'));",
+                  "pm.test('tiene range', () => pm.expect(body).to.have.property('range'));",
+                  "pm.test('tiene points', () => pm.expect(body.points).to.be.an('array'));",
+                  "pm.test('tiene degraded', () => pm.expect(body).to.have.property('degraded'));"
                 ]
               }
             }
           ],
           "response": [
             {
-              "name": "200 - estructura de respuesta (valores variables)",
+              "name": "200 - charts BTC modo mock",
               "originalRequest": {
                 "method": "GET",
-                "header": [],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
                 "url": {
-                  "raw": "{{BASE_URL}}/api/v1/dashboard",
+                  "raw": "{{BASE_URL}}/api/v1/dashboard/charts?asset=BTC&range=7d",
                   "host": [
                     "{{BASE_URL}}"
                   ],
                   "path": [
                     "api",
                     "v1",
-                    "dashboard"
+                    "dashboard",
+                    "charts"
+                  ],
+                  "query": [
+                    {
+                      "key": "asset",
+                      "value": "BTC"
+                    },
+                    {
+                      "key": "range",
+                      "value": "7d"
+                    }
                   ]
                 }
               },
@@ -210,7 +261,104 @@
                 }
               ],
               "_postman_previewlanguage": "json",
-              "body": "{\n  \"dolar\": [ { \"tipo\": \"oficial\", \"compra\": 1000.00, \"venta\": 1040.00 } ],\n  \"fx\": [ { \"from\": \"USD\", \"to\": \"EUR\", \"rate\": 0.92 } ],\n  \"crypto\": [ { \"id\": \"bitcoin\", \"symbol\": \"BTC\", \"priceUsd\": 67000, \"change24h\": 2.5 } ],\n  \"cryptoHistory\": [ { \"timestamp\": \"2026-10-15T00:00:00Z\", \"priceUsd\": 67000 } ],\n  \"equities\": [ { \"ticker\": \"AAPL\", \"price\": 175.00, \"currency\": \"USD\" } ],\n  \"equityCandles\": [ { \"ticker\": \"AAPL\", \"ohlcPoints\": [ { \"t\": 1792627200, \"o\": 175.00, \"h\": 175.00, \"l\": 175.00, \"c\": 175.00, \"v\": 0 } ] } ],\n  \"news\": [ { \"id\": \"demo-ai\", \"title\": \"AI research demo\", \"summary\": \"Static AI news fixture\", \"source\": \"Meridian Demo\", \"publishedAt\": \"2026-01-01T12:00:00Z\", \"url\": \"https://example.com/demo-ai\", \"topic\": \"ai-tech\" } ],\n  \"degraded\": []\n}"
+              "body": "{\n  \"asset\": \"BTC\",\n  \"range\": \"7d\",\n  \"points\": [\n    {\n      \"t\": \"2026-10-16T00:00:00Z\",\n      \"v\": 66000\n    },\n    {\n      \"t\": \"2026-10-22T00:00:00Z\",\n      \"v\": 67000\n    }\n  ],\n  \"degraded\": false\n}"
+            }
+          ]
+        },
+        {
+          "name": "News",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/v1/dashboard/news?topic=ai-tech&limit=8",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "dashboard",
+                "news"
+              ],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "ai-tech"
+                },
+                {
+                  "key": "limit",
+                  "value": "8"
+                }
+              ]
+            },
+            "description": "Noticias IA/tecnología protegidas por JWT."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('tiene items', () => pm.expect(body.items).to.be.an('array'));",
+                  "pm.test('tiene degraded', () => pm.expect(body).to.have.property('degraded'));"
+                ]
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "200 - news modo mock",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{accessToken}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{BASE_URL}}/api/v1/dashboard/news?topic=ai-tech&limit=8",
+                  "host": [
+                    "{{BASE_URL}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "dashboard",
+                    "news"
+                  ],
+                  "query": [
+                    {
+                      "key": "topic",
+                      "value": "ai-tech"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "8"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "_postman_previewlanguage": "json",
+              "body": "{\n  \"items\": [\n    {\n      \"id\": \"demo-ai\",\n      \"title\": \"AI research demo\",\n      \"summary\": \"Static AI news fixture\",\n      \"source\": \"Meridian Demo\",\n      \"publishedAt\": \"2026-01-01T12:00:00Z\",\n      \"url\": \"https://example.com/demo-ai\",\n      \"topic\": \"ai-tech\"\n    },\n    {\n      \"id\": \"demo-tech\",\n      \"title\": \"Technology demo\",\n      \"summary\": \"Static technology news fixture\",\n      \"source\": \"Meridian Demo\",\n      \"publishedAt\": \"2026-01-02T12:00:00Z\",\n      \"url\": \"https://example.com/demo-tech\",\n      \"topic\": \"ai-tech\"\n    }\n  ],\n  \"degraded\": false\n}"
             }
           ]
         }
@@ -236,7 +384,7 @@
                 "dashboard"
               ]
             },
-            "description": "Devuelve el grupo OpenAPI dashboard en JSON. El contrato completo también está en /v3/api-docs y la copia versionada en delivery/openapi/dashboard-service/openapi.json."
+            "description": "Devuelve el grupo OpenAPI dashboard en JSON."
           },
           "event": [
             {
@@ -246,43 +394,12 @@
                 "exec": [
                   "pm.test('200 OK', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('título del contrato', () => pm.expect(body.info.title).to.eql('Dashboard Service API'));",
-                  "pm.test('publica GET /api/v1/dashboard', () => pm.expect(body.paths).to.have.property('/api/v1/dashboard'));"
+                  "pm.test('título del contrato', () => pm.expect(body.info.title).to.eql('Dashboard Service API'));"
                 ]
               }
             }
           ],
-          "response": [
-            {
-              "name": "200 - contrato del grupo dashboard",
-              "originalRequest": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{BASE_URL}}/v3/api-docs/dashboard",
-                  "host": [
-                    "{{BASE_URL}}"
-                  ],
-                  "path": [
-                    "v3",
-                    "api-docs",
-                    "dashboard"
-                  ]
-                },
-                "description": "Devuelve el grupo OpenAPI dashboard en JSON. El contrato completo también está en /v3/api-docs y la copia versionada en delivery/openapi/dashboard-service/openapi.json."
-              },
-              "status": "OK",
-              "code": 200,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "application/json"
-                }
-              ],
-              "_postman_previewlanguage": "json",
-              "body": "{\n  \"openapi\": \"3.1.0\",\n  \"info\": {\n    \"title\": \"Dashboard Service API\",\n    \"description\": \"Datos públicos agregados de dólar, FX, criptomonedas, bolsa y noticias de IA/tecnología. Los fallos de un proveedor se informan en la lista degraded sin cambiar el status HTTP. Con DASHBOARD_USE_MOCK=true las respuestas usan fixtures estáticas y el ejemplo de este contrato.\",\n    \"version\": \"1.0\"\n  },\n  \"servers\": [\n    {\n      \"url\": \"http://localhost:8081\",\n      \"description\": \"Entorno local\"\n    }\n  ],\n  \"tags\": [\n    {\n      \"name\": \"Dashboard\",\n      \"description\": \"Datos públicos agregados de mercado y noticias\"\n    }\n  ],\n  \"paths\": {\n    \"/api/v1/dashboard\": {\n      \"get\": {\n        \"tags\": [\n          \"Dashboard\"\n        ],\n        \"summary\": \"Obtener el dashboard agregado\",\n        \"description\": \"Agrega cotizaciones de dólar y FX, precios e histórico de cripto, quotes y velas de bolsa y noticias de IA/tecnología. Con DASHBOARD_USE_MOCK=true devuelve fixtures estáticas sin llamadas externas. Los fallos de un proveedor no generan error HTTP: la sección se informa en degraded y se sirve cache o una lista vacía.\",\n        \"operationId\": \"getDashboard\",\n        \"responses\": {\n          \"200\": {\n            \"description\": \"Datos agregados del dashboard\",\n            \"content\": {\n              \"application/json\": {\n                \"schema\": {\n                  \"$ref\": \"#/components/schemas/DashboardResponse\"\n                },\n                \"examples\": {\n                  \"modoMock\": {\n                    \"$ref\": \"#/components/examples/DashboardMock\"\n                  }\n                }\n              }\n            }\n          },\n          \"500\": {\n            \"description\": \"Error interno inesperado durante la orquestación\",\n            \"content\": {\n              \"application/json\": {\n                \"schema\": {\n                  \"$ref\": \"#/components/schemas/ErrorResponse\"\n                },\n                \"examples\": {\n                  \"errorInterno\": {\n                    \"$ref\": \"#/components/examples/InternalError\"\n                  }\n                }\n              }\n            }\n          }\n        }\n      }\n    }\n  },\n  \"components\": {\n    \"schemas\": {\n      \"DolarResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Cotización de compra y venta de un tipo de dólar en ARS\",\n        \"properties\": {\n          \"tipo\": {\n            \"type\": \"string\",\n            \"description\": \"Tipo de dólar\",\n            \"example\": \"oficial\"\n          },\n          \"compra\": {\n            \"type\": \"number\",\n            \"description\": \"Precio de compra en ARS\",\n            \"example\": 1000\n          },\n          \"venta\": {\n            \"type\": \"number\",\n            \"description\": \"Precio de venta en ARS\",\n            \"example\": 1040\n          }\n        }\n      },\n      \"FxRateResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Tipo de cambio entre dos divisas\",\n        \"properties\": {\n          \"from\": {\n            \"type\": \"string\",\n            \"description\": \"Moneda origen (ISO 4217)\",\n            \"example\": \"USD\"\n          },\n          \"to\": {\n            \"type\": \"string\",\n            \"description\": \"Moneda destino (ISO 4217)\",\n            \"example\": \"EUR\"\n          },\n          \"rate\": {\n            \"type\": \"number\",\n            \"description\": \"Unidades de la moneda destino por una unidad de la origen\",\n            \"example\": 0.92\n          }\n        }\n      },\n      \"CryptoResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Precio actual y variación de las últimas 24 horas de una criptomoneda\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\",\n            \"description\": \"Identificador de la moneda en CoinGecko\",\n            \"example\": \"bitcoin\"\n          },\n          \"symbol\": {\n            \"type\": \"string\",\n            \"description\": \"Símbolo de la moneda\",\n            \"example\": \"BTC\"\n          },\n          \"priceUsd\": {\n            \"type\": \"number\",\n            \"description\": \"Precio actual en USD\",\n            \"example\": 67000\n          },\n          \"change24h\": {\n            \"type\": \"number\",\n            \"description\": \"Variación porcentual de las últimas 24 horas\",\n            \"example\": 2.5\n          }\n        }\n      },\n      \"CryptoPricePoint\": {\n        \"type\": \"object\",\n        \"description\": \"Punto de la serie histórica de una criptomoneda\",\n        \"properties\": {\n          \"timestamp\": {\n            \"type\": \"string\",\n            \"format\": \"date-time\",\n            \"description\": \"Fecha y hora UTC del punto\",\n            \"example\": \"2026-10-15T00:00:00Z\"\n          },\n          \"priceUsd\": {\n            \"type\": \"number\",\n            \"description\": \"Precio en USD en ese momento\",\n            \"example\": 67000\n          }\n        }\n      },\n      \"EquityQuoteResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Último precio de una acción o ETF\",\n        \"properties\": {\n          \"ticker\": {\n            \"type\": \"string\",\n            \"description\": \"Ticker del instrumento\",\n            \"example\": \"AAPL\"\n          },\n          \"price\": {\n            \"type\": \"number\",\n            \"description\": \"Último precio\",\n            \"example\": 175\n          },\n          \"currency\": {\n            \"type\": \"string\",\n            \"description\": \"Moneda del precio (ISO 4217)\",\n            \"example\": \"USD\"\n          }\n        }\n      },\n      \"OhlcPoint\": {\n        \"type\": \"object\",\n        \"description\": \"Vela OHLC diaria expresada con timestamp Unix en segundos\",\n        \"properties\": {\n          \"t\": {\n            \"type\": \"integer\",\n            \"format\": \"int64\",\n            \"description\": \"Timestamp Unix en segundos\",\n            \"example\": 1792627200\n          },\n          \"o\": {\n            \"type\": \"number\",\n            \"description\": \"Precio de apertura\",\n            \"example\": 175\n          },\n          \"h\": {\n            \"type\": \"number\",\n            \"description\": \"Precio máximo\",\n            \"example\": 175\n          },\n          \"l\": {\n            \"type\": \"number\",\n            \"description\": \"Precio mínimo\",\n            \"example\": 175\n          },\n          \"c\": {\n            \"type\": \"number\",\n            \"description\": \"Precio de cierre\",\n            \"example\": 175\n          },\n          \"v\": {\n            \"type\": \"number\",\n            \"description\": \"Volumen negociado\",\n            \"example\": 0\n          }\n        }\n      },\n      \"CandleResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Serie OHLC diaria de un instrumento\",\n        \"properties\": {\n          \"ticker\": {\n            \"type\": \"string\",\n            \"description\": \"Ticker del instrumento\",\n            \"example\": \"AAPL\"\n          },\n          \"ohlcPoints\": {\n            \"type\": \"array\",\n            \"description\": \"Velas diarias del rango consultado\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/OhlcPoint\"\n            }\n          }\n        }\n      },\n      \"NewsArticleResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Noticia de IA y tecnología normalizada\",\n        \"properties\": {\n          \"id\": {\n            \"type\": \"string\",\n            \"description\": \"Identificador de la noticia (URL en NewsAPI u objectID en HN)\",\n            \"example\": \"demo-ai\"\n          },\n          \"title\": {\n            \"type\": \"string\",\n            \"description\": \"Título\",\n            \"example\": \"AI research demo\"\n          },\n          \"summary\": {\n            \"type\": \"string\",\n            \"description\": \"Resumen o descripción\",\n            \"example\": \"Static AI news fixture\"\n          },\n          \"source\": {\n            \"type\": \"string\",\n            \"description\": \"Fuente de la noticia\",\n            \"example\": \"Meridian Demo\"\n          },\n          \"publishedAt\": {\n            \"type\": \"string\",\n            \"format\": \"date-time\",\n            \"description\": \"Fecha de publicación en UTC\",\n            \"example\": \"2026-01-01T12:00:00Z\"\n          },\n          \"url\": {\n            \"type\": \"string\",\n            \"description\": \"URL del artículo\",\n            \"example\": \"https://example.com/demo-ai\"\n          },\n          \"topic\": {\n            \"type\": \"string\",\n            \"description\": \"Tema de la noticia; siempre ai-tech\",\n            \"example\": \"ai-tech\"\n          }\n        }\n      },\n      \"DashboardResponse\": {\n        \"type\": \"object\",\n        \"description\": \"Datos agregados de mercado y noticias para el dashboard\",\n        \"properties\": {\n          \"dolar\": {\n            \"type\": \"array\",\n            \"description\": \"Cotizaciones de dólar oficial y blue en ARS\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/DolarResponse\"\n            }\n          },\n          \"fx\": {\n            \"type\": \"array\",\n            \"description\": \"Tipos de cambio internacionales USD→EUR y USD→BRL\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/FxRateResponse\"\n            }\n          },\n          \"crypto\": {\n            \"type\": \"array\",\n            \"description\": \"Precio actual y variación 24h de BTC y ETH en USD\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/CryptoResponse\"\n            }\n          },\n          \"cryptoHistory\": {\n            \"type\": \"array\",\n            \"description\": \"Serie de precios de los últimos 7 días de BTC y ETH\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/CryptoPricePoint\"\n            }\n          },\n          \"equities\": {\n            \"type\": \"array\",\n            \"description\": \"Últimos precios de AAPL, MSFT y SPY\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/EquityQuoteResponse\"\n            }\n          },\n          \"equityCandles\": {\n            \"type\": \"array\",\n            \"description\": \"Velas OHLC diarias por ticker\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/CandleResponse\"\n            }\n          },\n          \"news\": {\n            \"type\": \"array\",\n            \"description\": \"Noticias de IA y tecnología normalizadas\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/NewsArticleResponse\"\n            }\n          },\n          \"degraded\": {\n            \"type\": \"array\",\n            \"description\": \"Secciones sin datos frescos\",\n            \"items\": {\n              \"type\": \"string\",\n              \"example\": \"dolar\"\n            }\n          }\n        }\n      },\n      \"ErrorResponse\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"code\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"VALIDATION_ERROR\",\n              \"BAD_REQUEST\",\n              \"NOT_FOUND\",\n              \"CONFLICT\",\n              \"INTERNAL_ERROR\"\n            ]\n          },\n          \"message\": {\n            \"type\": \"string\"\n          },\n          \"details\": {\n            \"type\": \"array\",\n            \"items\": {\n              \"$ref\": \"#/components/schemas/FieldError\"\n            }\n          },\n          \"timestamp\": {\n            \"type\": \"string\",\n            \"format\": \"date-time\"\n          }\n        }\n      },\n      \"FieldError\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"field\": {\n            \"type\": \"string\"\n          },\n          \"message\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    },\n    \"examples\": {\n      \"DashboardMock\": {\n        \"summary\": \"Dashboard en modo mock\",\n        \"description\": \"Respuesta completa con DASHBOARD_USE_MOCK=true; los valores son fixtures estáticas y no cotizaciones reales.\",\n        \"value\": {\n          \"dolar\": [\n            {\n              \"tipo\": \"oficial\",\n              \"compra\": 1000,\n              \"venta\": 1040\n            },\n            {\n              \"tipo\": \"blue\",\n              \"compra\": 1200,\n              \"venta\": 1220\n            }\n          ],\n          \"fx\": [\n            {\n              \"from\": \"USD\",\n              \"to\": \"EUR\",\n              \"rate\": 0.92\n            },\n            {\n              \"from\": \"USD\",\n              \"to\": \"BRL\",\n              \"rate\": 5.1\n            }\n          ],\n          \"crypto\": [\n            {\n              \"id\": \"bitcoin\",\n              \"symbol\": \"BTC\",\n              \"priceUsd\": 67000,\n              \"change24h\": 2.5\n            },\n            {\n              \"id\": \"ethereum\",\n              \"symbol\": \"ETH\",\n              \"priceUsd\": 3500,\n              \"change24h\": -1.2\n            }\n          ],\n          \"cryptoHistory\": [\n            {\n              \"timestamp\": \"2026-10-15T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-16T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-17T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-18T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-19T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-20T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-21T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-22T00:00:00Z\",\n              \"priceUsd\": 67000\n            },\n            {\n              \"timestamp\": \"2026-10-15T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-16T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-17T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-18T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-19T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-20T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-21T00:00:00Z\",\n              \"priceUsd\": 3500\n            },\n            {\n              \"timestamp\": \"2026-10-22T00:00:00Z\",\n              \"priceUsd\": 3500\n            }\n          ],\n          \"equities\": [\n            {\n              \"ticker\": \"AAPL\",\n              \"price\": 175,\n              \"currency\": \"USD\"\n            },\n            {\n              \"ticker\": \"MSFT\",\n              \"price\": 415,\n              \"currency\": \"USD\"\n            },\n            {\n              \"ticker\": \"SPY\",\n              \"price\": 450,\n              \"currency\": \"USD\"\n            }\n          ],\n          \"equityCandles\": [\n            {\n              \"ticker\": \"AAPL\",\n              \"ohlcPoints\": [\n                {\n                  \"t\": 1792627200,\n                  \"o\": 175,\n                  \"h\": 175,\n                  \"l\": 175,\n                  \"c\": 175,\n                  \"v\": 0\n                }\n              ]\n            },\n            {\n              \"ticker\": \"MSFT\",\n              \"ohlcPoints\": [\n                {\n                  \"t\": 1792627200,\n                  \"o\": 415,\n                  \"h\": 415,\n                  \"l\": 415,\n                  \"c\": 415,\n                  \"v\": 0\n                }\n              ]\n            },\n            {\n              \"ticker\": \"SPY\",\n              \"ohlcPoints\": [\n                {\n                  \"t\": 1792627200,\n                  \"o\": 450,\n                  \"h\": 450,\n                  \"l\": 450,\n                  \"c\": 450,\n                  \"v\": 0\n                }\n              ]\n            }\n          ],\n          \"news\": [\n            {\n              \"id\": \"demo-ai\",\n              \"title\": \"AI research demo\",\n              \"summary\": \"Static AI news fixture\",\n              \"source\": \"Meridian Demo\",\n              \"publishedAt\": \"2026-01-01T12:00:00Z\",\n              \"url\": \"https://example.com/demo-ai\",\n              \"topic\": \"ai-tech\"\n            },\n            {\n              \"id\": \"demo-tech\",\n              \"title\": \"Technology demo\",\n              \"summary\": \"Static technology news fixture\",\n              \"source\": \"Meridian Demo\",\n              \"publishedAt\": \"2026-01-02T12:00:00Z\",\n              \"url\": \"https://example.com/demo-tech\",\n              \"topic\": \"ai-tech\"\n            }\n          ],\n          \"degraded\": []\n        }\n      },\n      \"InternalError\": {\n        \"summary\": \"Error interno\",\n        \"description\": \"Error inesperado durante la orquestación; no expone detalles internos.\",\n        \"value\": {\n          \"code\": \"INTERNAL_ERROR\",\n          \"message\": \"Error interno\",\n          \"details\": [],\n          \"timestamp\": \"2026-10-22T10:05:00Z\"\n        }\n      }\n    }\n  }\n}"
-            }
-          ]
+          "response": []
         },
         {
           "name": "Swagger UI",
@@ -298,7 +415,7 @@
                 "swagger-ui.html"
               ]
             },
-            "description": "Redirige a la interfaz Swagger UI. Responde 200 cuando springdoc está habilitado; en producción se desactiva con springdoc.swagger-ui.enabled=false."
+            "description": "Interfaz Swagger UI."
           },
           "event": [
             {
@@ -311,35 +428,7 @@
               }
             }
           ],
-          "response": [
-            {
-              "name": "200 - interfaz Swagger UI",
-              "originalRequest": {
-                "method": "GET",
-                "header": [],
-                "url": {
-                  "raw": "{{BASE_URL}}/swagger-ui.html",
-                  "host": [
-                    "{{BASE_URL}}"
-                  ],
-                  "path": [
-                    "swagger-ui.html"
-                  ]
-                },
-                "description": "Redirige a la interfaz Swagger UI. Responde 200 cuando springdoc está habilitado; en producción se desactiva con springdoc.swagger-ui.enabled=false."
-              },
-              "status": "OK",
-              "code": 200,
-              "header": [
-                {
-                  "key": "Content-Type",
-                  "value": "text/html"
-                }
-              ],
-              "_postman_previewlanguage": "html",
-              "body": ""
-            }
-          ]
+          "response": []
         }
       ]
     }

@@ -28,6 +28,7 @@ jobs:
           cache: maven
           cache-dependency-path: services/dashboard-service/pom.xml
       - run: chmod +x mvnw
+      # Tests use their isolated test key; production JWT_SECRET is never needed for builds.
       - run: ./mvnw -B clean verify
       - uses: actions/upload-artifact@v4
         if: always()

@@ -1,2 +1,5 @@
 config:
   useMock: true
+jwt:
+  # Obligatorio incluso con mocks: JWT_SECRET debe tener el mismo valor que auth-service.
+  existingSecret: auth-jwt

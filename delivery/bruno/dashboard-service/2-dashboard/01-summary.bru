@@ -1,0 +1,29 @@
+meta {
+  name: Summary (JWT)
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/dashboard/summary
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.brand: isString
+  res.body.generatedAt: isString
+  res.body.fx: isDefined
+  res.body.crypto: isDefined
+  res.body.equities: isDefined
+  res.body.degraded: isArray
+}
+
+docs {
+  Resumen protegido por JWT (dólar ARS, cripto, bolsa). Requiere Authorization: Bearer <accessToken> obtenido desde auth-service.
+}

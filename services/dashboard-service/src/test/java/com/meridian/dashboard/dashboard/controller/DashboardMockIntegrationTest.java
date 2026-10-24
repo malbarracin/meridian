@@ -2,6 +2,8 @@ package com.meridian.dashboard.dashboard.controller;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,6 +21,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("Dashboard offline completo")
 class DashboardMockIntegrationTest {
 
+    private static String bearerToken() {
+        return "Bearer " + com.meridian.dashboard.security.JwtValidatorTest.token(
+                com.meridian.dashboard.security.JwtValidatorTest.SECRET,
+                java.time.Instant.now().plusSeconds(300));
+    }
+
     @Autowired private MockMvc mockMvc;
     @MockitoBean(name = "dolarApiWebClient") private WebClient dolarClient;
     @MockitoBean(name = "frankfurterWebClient") private WebClient fxClient;
@@ -27,18 +35,28 @@ class DashboardMockIntegrationTest {
     @MockitoBean(name = "newsApiWebClient") private WebClient newsClient;
     @MockitoBean(name = "hnAlgoliaWebClient") private WebClient hnClient;
 
+    @ParameterizedTest
+    @ValueSource(strings = {"BTC", "ETH", "AAPL", "MSFT", "SPY"})
+    @DisplayName("Charts sirve cada activo con fixtures sin utilizar clientes HTTP")
+    void devuelveChartsOffline(String asset) throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/charts").param("asset", asset)
+                        .header("Authorization", bearerToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.asset").value(asset))
+                .andExpect(jsonPath("$.range").value("7d"))
+                .andExpect(jsonPath("$.points").isNotEmpty())
+                .andExpect(jsonPath("$.degraded").value(false));
+        verifyNoInteractions(dolarClient, fxClient, cryptoClient, equityClient, newsClient, hnClient);
+    }
+
     @Test
     @DisplayName("Devuelve fixtures de todas las secciones sin utilizar clientes HTTP")
     void devuelveFixturesSinHttp() throws Exception {
-        mockMvc.perform(get("/api/v1/dashboard"))
+        mockMvc.perform(get("/api/v1/dashboard/summary").header("Authorization", bearerToken()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.dolar").isNotEmpty())
                 .andExpect(jsonPath("$.fx").isNotEmpty())
                 .andExpect(jsonPath("$.crypto").isNotEmpty())
-                .andExpect(jsonPath("$.cryptoHistory.length()").value(16))
                 .andExpect(jsonPath("$.equities").isNotEmpty())
-                .andExpect(jsonPath("$.equityCandles").isNotEmpty())
-                .andExpect(jsonPath("$.news").isNotEmpty())
                 .andExpect(jsonPath("$.degraded").isEmpty());
         verifyNoInteractions(dolarClient, fxClient, cryptoClient, equityClient, newsClient, hnClient);
     }

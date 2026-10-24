@@ -1,14 +1,12 @@
-# dashboard-service — datos públicos del dashboard
+# dashboard-service — datos de mercados protegidos por JWT
 
-Servicio REST que agrega en una sola respuesta las cotizaciones de dólar oficial y blue, los tipos de
-cambio USD→EUR/BRL, los precios e histórico de criptomonedas, las quotes y velas de bolsa y las noticias
-de IA/tecnología. Lo consume el frontend del dashboard de Meridian; no persiste datos: consulta proveedores
-externos, cachea en memoria y degrada las secciones que fallan sin cortar la respuesta.
+Servicio REST de mercados de Meridian. Expone tres endpoints protegidos por JWT para obtener el resumen de mercado, series históricas y noticias de IA/tecnología, con caché en memoria y degradación independiente por fuente.
 
 ## Funcionalidades
 
-- `GET /api/v1/dashboard`: devuelve todas las secciones agregadas (dólar, FX, cripto, histórico, bolsa,
-  velas y noticias) y la lista `degraded` con las secciones sin datos frescos.
+- `GET /api/v1/dashboard/summary`: resumen agregado (dólar ARS, cripto y bolsa) protegido por JWT, con lista `degraded`.
+- `GET /api/v1/dashboard/charts`: serie histórica de un activo soportado (BTC, ETH, AAPL, MSFT, SPY) en ventana `7d`, protegido por JWT.
+- `GET /api/v1/dashboard/news`: noticias normalizadas de IA/tecnología (`topic=ai-tech`), protegido por JWT.
 - `GET /actuator/health` y `GET /actuator/info`: estado y metadatos del servicio.
 - Swagger UI y OpenAPI: contrato interactivo en `/swagger-ui.html` y `/v3/api-docs`.
 - Modo mock (`DASHBOARD_USE_MOCK=true`): fixtures estáticas sin llamadas externas, para desarrollo y QA.
@@ -29,32 +27,44 @@ externos, cachea en memoria y degrada las secciones que fallan sin cortar la res
 
 - JDK 21 (`java -version`).
 - Acceso a internet solo para el modo con proveedores reales.
-- No requiere Docker, base de datos ni variables obligatorias para arrancar.
+- Requiere `JWT_SECRET` con el mismo valor que auth-service (al menos 32 bytes); **obligatorio, sin valor por defecto**.
+- `FINNHUB_API_KEY` y `NEWS_API_KEY` son opcionales (sin clave se usan fixtures/fallback; modo mock disponible).
+- No requiere base de datos.
 
 ## Cómo correrlo
 
 ### Local
 
-Desde esta carpeta (`services/dashboard-service`):
+Desde esta carpeta (`services/dashboard-service`). `JWT_SECRET` es obligatorio:
 
 ```powershell
+$env:JWT_SECRET = '<mismo-secreto-que-auth-service>'
 .\mvnw.cmd spring-boot:run
 ```
 
-En Linux/macOS: `./mvnw spring-boot:run`. El servicio escucha en `http://localhost:8081`.
+En Linux/macOS: `export JWT_SECRET=...` y `./mvnw spring-boot:run`. Escucha en `http://localhost:8081`.
 
 Para arrancar sin llamadas externas:
 
 ```powershell
+$env:JWT_SECRET = '<mismo-secreto-que-auth-service>'
 $env:DASHBOARD_USE_MOCK = 'true'
 .\mvnw.cmd spring-boot:run
 ```
+
+## Flujo de autenticación y uso
+
+1. Iniciar sesión / obtener token desde `auth-service` (por ejemplo `POST /api/v1/auth/login`) para obtener `accessToken`.
+2. Usar ese `accessToken` contra `dashboard-service` enviando `Authorization: Bearer <accessToken>` en todos los endpoints `/api/v1/dashboard/*`.
+3. Consultar los endpoints protegidos.
 
 Con el servicio arriba:
 
 ```powershell
 Invoke-RestMethod http://localhost:8081/actuator/health
-Invoke-RestMethod http://localhost:8081/api/v1/dashboard
+Invoke-RestMethod http://localhost:8081/api/v1/dashboard/summary -Headers @{Authorization="Bearer <accessToken>"}
+Invoke-RestMethod "http://localhost:8081/api/v1/dashboard/charts?asset=BTC&range=7d" -Headers @{Authorization="Bearer <accessToken>"}
+Invoke-RestMethod "http://localhost:8081/api/v1/dashboard/news?topic=ai-tech&limit=8" -Headers @{Authorization="Bearer <accessToken>"}
 ```
 
 El puerto se cambia con `PORT` (por ejemplo `$env:PORT = '9090'`). Si se cambia el puerto, ajustar
@@ -67,15 +77,14 @@ DevOps mantiene el Dockerfile, Compose y Helm del repositorio. Ver la sección d
 
 ## Configuración
 
-Todas las variables son opcionales. Los valores entre paréntesis son los de `application.yml`.
-
 | Variable / propiedad | Para qué | Valor por defecto |
 |---|---|---|
+| `JWT_SECRET` | Secreto HMAC-SHA256 para validar JWT emitidos por `auth-service`. **Obligatorio, sin default.** Debe coincidir con el de `auth-service`. | — |
 | `PORT` | Puerto HTTP (`server.port`) | `8081` |
 | `DASHBOARD_USE_MOCK` | Sirve fixtures estáticas sin llamadas externas | `false` |
 | `DASHBOARD_CACHE_TTL_SECONDS` | TTL de la caché por recurso; cripto usa mínimo 60 s | `60` |
-| `FINNHUB_API_KEY` | Clave de Finnhub para quotes y velas; si falta se usan fixtures | vacía |
-| `NEWS_API_KEY` | Clave de NewsAPI; si falta se consulta HN Algolia | vacía |
+| `FINNHUB_API_KEY` | Clave de Finnhub para quotes y velas; **opcional** — si falta se usan fixtures | vacía |
+| `NEWS_API_KEY` | Clave de NewsAPI; **opcional** — si falta se consulta HN Algolia (fallback) | vacía |
 | `DASHBOARD_DOLAR_API_BASE_URL` | Base URL de DolarApi | `https://dolarapi.com` |
 | `DASHBOARD_FRANKFURTER_BASE_URL` | Base URL de Frankfurter | `https://api.frankfurter.app` |
 | `DASHBOARD_COIN_GECKO_BASE_URL` | Base URL de CoinGecko | `https://api.coingecko.com` |
@@ -119,12 +128,16 @@ evidencia; SPY se conserva como ETF de referencia. Los tests usan MockWebServer 
 
 | Método | Ruta | Qué hace | Respuestas |
 |---|---|---|---|
-| GET | `/api/v1/dashboard` | Agrega todas las secciones del dashboard | `200` `DashboardResponse`, `500` `ErrorResponse` |
+| GET | `/api/v1/dashboard/summary` | Resumen protegido por JWT (dólar ARS, cripto, bolsa). Requiere `Authorization: Bearer <accessToken>` | `200` `SummaryResponse`, `401` `ErrorResponse`, `500` `ErrorResponse` |
+| GET | `/api/v1/dashboard/charts?asset=<asset>&range=7d` | Serie histórica protegida por JWT (`BTC\|ETH\|AAPL\|MSFT\|SPY`, `range=7d`). Requiere `Authorization: Bearer <accessToken>` | `200` `ChartsResponse`, `400` `ErrorResponse`, `401` `ErrorResponse`, `500` `ErrorResponse` |
+| GET | `/api/v1/dashboard/news?topic=ai-tech&limit=8` | Noticias IA/tecnología protegidas por JWT (`limit` 1..8). Requiere `Authorization: Bearer <accessToken>` | `200` `NewsResponse`, `400` `ErrorResponse`, `401` `ErrorResponse`, `500` `ErrorResponse` |
 | GET | `/actuator/health` | Estado del servicio | `200` `{"status":"UP"}` |
 | GET | `/actuator/info` | Metadatos de la aplicación | `200` |
 
 ```bash
-curl.exe -i http://localhost:8081/api/v1/dashboard
+curl.exe -i -H "Authorization: Bearer <accessToken>" http://localhost:8081/api/v1/dashboard/summary
+curl.exe -i -H "Authorization: Bearer <accessToken>" "http://localhost:8081/api/v1/dashboard/charts?asset=BTC&range=7d"
+curl.exe -i -H "Authorization: Bearer <accessToken>" "http://localhost:8081/api/v1/dashboard/news?topic=ai-tech&limit=8"
 ```
 
 Con el servicio en modo mock la respuesta usa fixtures; con proveedores reales cambian los valores y
@@ -132,63 +145,38 @@ Con el servicio en modo mock la respuesta usa fixtures; con proveedores reales c
 
 ```json
 {
-  "dolar": [
-    { "tipo": "oficial", "compra": 1000.00, "venta": 1040.00 },
-    { "tipo": "blue", "compra": 1200.00, "venta": 1220.00 }
-  ],
-  "fx": [
-    { "from": "USD", "to": "EUR", "rate": 0.92 },
-    { "from": "USD", "to": "BRL", "rate": 5.10 }
-  ],
-  "crypto": [
-    { "id": "bitcoin", "symbol": "BTC", "priceUsd": 67000, "change24h": 2.5 },
-    { "id": "ethereum", "symbol": "ETH", "priceUsd": 3500, "change24h": -1.2 }
-  ],
-  "cryptoHistory": [
-    { "timestamp": "2026-10-15T00:00:00Z", "priceUsd": 67000 }
-  ],
-  "equities": [
-    { "ticker": "AAPL", "price": 175.00, "currency": "USD" },
-    { "ticker": "MSFT", "price": 415.00, "currency": "USD" },
-    { "ticker": "SPY", "price": 450.00, "currency": "USD" }
-  ],
-  "equityCandles": [
-    {
-      "ticker": "AAPL",
-      "ohlcPoints": [
-        { "t": 1792627200, "o": 175.00, "h": 175.00, "l": 175.00, "c": 175.00, "v": 0 }
-      ]
-    }
-  ],
-  "news": [
-    {
-      "id": "demo-ai",
-      "title": "AI research demo",
-      "summary": "Static AI news fixture",
-      "source": "Meridian Demo",
-      "publishedAt": "2026-01-01T12:00:00Z",
-      "url": "https://example.com/demo-ai",
-      "topic": "ai-tech"
-    }
-  ],
+  "brand": "Meridian",
+  "generatedAt": "2026-10-22T10:05:00Z",
+  "fx": {"quotes": {
+    "usd_oficial": {"compra": 1000, "venta": 1040},
+    "usd_blue": {"compra": 1200, "venta": 1220}
+  }},
+  "crypto": {
+    "bitcoin": {"priceUsd": 67000, "change24hPct": 2.5},
+    "ethereum": {"priceUsd": 3500, "change24hPct": -1.2}
+  },
+  "equities": {
+    "AAPL": {"price": 175, "currency": "USD"},
+    "MSFT": {"price": 415, "currency": "USD"},
+    "SPY": {"price": 450, "currency": "USD"}
+  },
   "degraded": []
 }
 ```
 
-`degraded` contiene los nombres de sección (`dolar`, `fx`, `crypto`, `cryptoHistory`, `equities`,
-`equityCandles`, `news`). `cryptoHistory` se informa una sola vez aunque fallen BTC y ETH. Las listas
-pueden venir vacías si no hay datos ni caché previa; `null` no se devuelve.
+El campo público `fx` contiene dólar ARS de DolarApi, no FX internacional de Frankfurter.
+`degraded` solo contiene `fx`, `crypto` y `equities`. Se conserva el último dato stale ante
+fallos; sin caché previa, el mapa de la sección queda vacío.
 
 ### Errores
 
 El contrato es uniforme para toda la API (`com.meridian.dashboard.exception`): `code`, `message`, `details`
-y `timestamp`; `details` nunca es `null` y no se expone stacktrace. El endpoint del dashboard solo puede
-devolver `500 INTERNAL_ERROR` en un fallo inesperado de la orquestación:
+y `timestamp`; `details` nunca es `null` y no se expone stacktrace.
 
 ```json
 {
-  "code": "INTERNAL_ERROR",
-  "message": "Error interno",
+  "code": "UNAUTHORIZED",
+  "message": "Token JWT inválido o ausente",
   "details": [],
   "timestamp": "2026-10-22T10:05:00Z"
 }
@@ -196,23 +184,25 @@ devolver `500 INTERNAL_ERROR` en un fallo inesperado de la orquestación:
 
 | HTTP | `code` | Cuándo |
 |---|---|---|
-| 400 | `VALIDATION_ERROR` | Datos inválidos (reservado para endpoints con body o parámetros) |
-| 400 | `BAD_REQUEST` | Solicitud mal formada (reservado) |
+| 400 | `VALIDATION_ERROR` | `asset`/`range`/`topic`/`limit` no soportados |
+| 400 | `BAD_REQUEST` | Solicitud mal formada |
+| 401 | `UNAUTHORIZED` | JWT ausente, inválido o expirado |
 | 404 | `NOT_FOUND` | Recurso inexistente (reservado) |
 | 409 | `CONFLICT` | Conflicto de dominio (reservado) |
 | 500 | `INTERNAL_ERROR` | Fallo inesperado de la orquestación o del handler |
 
-El `GlobalExceptionHandler` mapea los cinco códigos; hoy `GET /api/v1/dashboard` no recibe body ni
-parámetros, por lo que en la práctica solo aplica `500`.
+Los fallos de proveedores **no** son errores HTTP: se informan en `degraded`. `summary` no recibe
+parámetros (`401` / `500`); `charts` y `news` también pueden devolver `400`.
 
 ## Probar la API
 
 - Postman: importar `delivery/postman/dashboard-service.postman_collection.json` y el entorno
-  `delivery/postman/dashboard-service.postman_environment.json`. El entorno trae `BASE_URL`,
-  `FINNHUB_API_KEY`, `NEWS_API_KEY`, `DASHBOARD_CACHE_TTL_SECONDS` y `DASHBOARD_USE_MOCK`.
-- Bruno: abrir la colección `delivery/bruno/dashboard-service/` o importar el JSON de Postman.
-- Paso a paso, orden y resultados esperados: `delivery/qa-manual.md`.
-- Ejemplos curl: `delivery/api.md`.
+  `delivery/postman/dashboard-service.postman_environment.json`. Setear `accessToken` (login en
+  auth-service). El entorno también documenta `BASE_URL`, `FINNHUB_API_KEY`, `NEWS_API_KEY`,
+  `DASHBOARD_CACHE_TTL_SECONDS` y `DASHBOARD_USE_MOCK`.
+- Bruno: abrir `delivery/bruno/dashboard-service/` (`2-dashboard/01-summary`, `02-charts`, `03-news`)
+  con Bearer `{{accessToken}}`.
+- Paso a paso: `delivery/qa-manual.md`. Ejemplos curl: `delivery/api.md`.
 - OpenAPI: `delivery/openapi/dashboard-service/openapi.json` y `.yaml`.
 
 ## Tests
@@ -243,16 +233,17 @@ tests de integración.
 ```text
 com.meridian.dashboard
 ├── DashboardApplication.java
-├── config/                  # WebClient por proveedor, executor virtual, OpenAPI
-├── exception/               # contrato de error: ErrorResponse, ErrorCode, handler
+├── config/                  # WebClient, executor virtual, WebMvc, OpenAPI
+├── security/                # JwtConfig, JwtValidator, JwtAuthInterceptor
+├── exception/               # ErrorResponse, ErrorCode (+ UNAUTHORIZED), handler
 └── dashboard/
-    ├── controller/          # DashboardController
-    ├── service/             # DashboardService (orquestación en paralelo)
+    ├── controller/          # DashboardController (summary | charts | news)
+    ├── service/             # DashboardService, ChartsService, NewsService
     ├── cache/               # DashboardCacheService (TTL + última respuesta buena)
     ├── adapter/             # DolarApi, Frankfurter, CoinGecko, Finnhub, News/HN
     ├── mapper/              # MapStruct: respuestas de proveedor → DTO
     ├── mock/                # DashboardMockFixtures
-    └── dto/                 # DashboardResponse y DTOs de cada sección
+    └── dto/                 # SummaryResponse, ChartsResponse, NewsResponse, …
 ```
 
 ## Documentación
@@ -264,5 +255,6 @@ com.meridian.dashboard
 | `delivery/qa-manual.md` | Cómo probar todo con Postman/Bruno (sección dashboard-service) |
 | `delivery/openapi/dashboard-service/` | Contrato OpenAPI versionado generado por el build |
 | `delivery/devops-local.md` | Docker, CI y despliegue (sección dashboard-service) |
+| `specs/dashboard/spec.md` | Requisitos H3 (summary / charts / news + JWT) |
 | `specs/dashboard/apis-publicas.md` | Requisitos funcionales de las APIs públicas |
 | `specs/dashboard/arquitectura-apis-publicas.md` | Decisiones de arquitectura |

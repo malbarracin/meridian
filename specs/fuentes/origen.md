@@ -2,7 +2,7 @@
 title: Origen de los requisitos — Meridian
 status: aprobada
 source: https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7
-updated: 2026-10-22T23:08:00.175Z
+updated: 2026-10-23T23:57:25.867Z
 ---
 
 # Origen de los requisitos
@@ -12,7 +12,7 @@ updated: 2026-10-22T23:08:00.175Z
 | Proyecto | Meridian |
 | Fuente | Notion |
 | Link raíz | https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7 |
-| Actualizado | 2026-10-23 |
+| Actualizado | 2026-10-24 |
 
 ## Requisito → fuente
 
@@ -57,6 +57,13 @@ updated: 2026-10-22T23:08:00.175Z
 | Cache TTL y modo degraded | dashboard/apis-publicas | H8 — Sección 2 (Principios) y Sección 5 CA ("Cache TTL y degraded[] funcionan") |
 | Modo demo offline (DASHBOARD_USE_MOCK) | dashboard/apis-publicas | H8 — Sección 4 (DASHBOARD_USE_MOCK=false) y Sección 5 CA ("DASHBOARD_USE_MOCK=true permite demo offline") |
 | Configuración por variables de entorno (Dashboard) | dashboard/apis-publicas | H8 — Sección 4 (FINNHUB_API_KEY, NEWS_API_KEY, DASHBOARD_CACHE_TTL_SECONDS, DASHBOARD_USE_MOCK) |
+| Resumen del dashboard (`summary`) | dashboard/spec | H3 — Sección 3 ("GET /api/v1/dashboard/summary") / Sección 5 CA ("Summary incluye fx + crypto + equities") |
+| Series históricas para gráficos (`charts`) | dashboard/spec | H3 — Sección 3 ("GET /api/v1/dashboard/charts?asset=&range=") / Sección 5 CA ("Charts devuelve series usables por UI") |
+| Noticias IA/tecnología (`news`) | dashboard/spec | H3 — Sección 3 ("GET /api/v1/dashboard/news?topic=ai-tech&limit=8") / Sección 5 CA ("News filtra IA/tecnología") |
+| Protección JWT en todos los endpoints del dashboard | dashboard/spec | H3 — Sección 4, regla 1 ("Sin JWT → no hay datos") / Sección 5 CA ("401 sin JWT") |
+| API keys solo en backend, nunca al cliente | dashboard/spec | H3 — Sección 4, reglas 2 y 3 ("API keys solo en backend/env", "Frontend nunca llama a proveedores directamente") |
+| Contenido prohibido (branding y KPIs operativos) | dashboard/spec | H3 — Sección 1 y Sección 4, regla 5 / Sección 5 CA ("Ninguna respuesta de branding Soma") |
+| OpenAPI actualizado con los contratos del dashboard | dashboard/spec | H3 — Sección 5 CA ("OpenAPI refleja estos contratos") |
 
 ## Fuentes visitadas
 
@@ -68,3 +75,4 @@ updated: 2026-10-22T23:08:00.175Z
 | https://app.notion.com/p/3ac75bb08ca781a68ee5d18db3da7d71 | 🐳 H2.4 — MongoDB en entorno local | Fuente principal de infra/mongodb-local |
 | https://app.notion.com/p/3ab75bb08ca781e7b24ae01f9cffc0e7 | 🚀 Meridian — Requisitos de producto (Login + Dashboard mercados) | Contexto de producto y alcance global |
 | https://app.notion.com/p/3ac75bb08ca781f5b410e46a6ec7143d | 📈 H8 — Catálogo APIs públicas (Dashboard Meridian) | Fuente principal de dashboard/apis-publicas |
+| https://app.notion.com/p/3ab75bb08ca7810faa9ddb10777255f7 | 📊 H3 — Backend Dashboard API (Mercados Meridian) | Fuente principal de dashboard/spec |

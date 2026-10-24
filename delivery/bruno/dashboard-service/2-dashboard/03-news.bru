@@ -1,0 +1,25 @@
+meta {
+  name: News (JWT)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{BASE_URL}}/api/v1/dashboard/news?topic=ai-tech&limit=8
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{accessToken}}
+}
+
+assert {
+  res.status: eq 200
+  res.body.items: isArray
+  res.body.degraded: isBoolean
+}
+
+docs {
+  Noticias IA/tecnología protegidas por JWT. topic=ai-tech, limit 1..8.
+}

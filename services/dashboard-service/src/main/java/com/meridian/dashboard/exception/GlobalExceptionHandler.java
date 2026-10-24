@@ -13,6 +13,8 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,6 +22,29 @@ import lombok.extern.slf4j.Slf4j;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /** Devuelve los parámetros rechazados por las restricciones del endpoint. */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    public ResponseEntity<ErrorResponse> handleMethodValidation(HandlerMethodValidationException exception) {
+        List<FieldError> details = exception.getParameterValidationResults().stream()
+                .map(result -> new FieldError(result.getMethodParameter().getParameterName(), "valor no soportado"))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR,
+                "La solicitud tiene datos inválidos", details);
+    }
+
+    /** Rechaza credenciales sin exponer el motivo criptográfico. */
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthorized(UnauthorizedException exception) {
+        return build(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, exception.getMessage(), List.of());
+    }
+
+    /** Identifica parámetros fuera del catálogo soportado. */
+    @ExceptionHandler(UnsupportedParameterException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedParameter(UnsupportedParameterException exception) {
+        return build(HttpStatus.BAD_REQUEST, ErrorCode.VALIDATION_ERROR, exception.getMessage(),
+                List.of(new FieldError(exception.getField(), "valor no soportado")));
+    }
 
     /** Devuelve los campos rechazados por la validación del cuerpo. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -49,6 +74,12 @@ public class GlobalExceptionHandler {
     }
 
     /** Informa de la ausencia de un recurso. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMissingRoute(NoResourceFoundException exception) {
+        return build(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, "Recurso no encontrado", List.of());
+    }
+
+    /** Informa de la ausencia de un recurso de dominio. */
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException exception) {
         return build(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, exception.getMessage(), List.of());

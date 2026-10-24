@@ -1,9 +1,11 @@
 package com.meridian.dashboard.dashboard.service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.springframework.stereotype.Service;
@@ -11,11 +13,15 @@ import org.springframework.stereotype.Service;
 import com.meridian.dashboard.dashboard.adapter.CoinGeckoAdapter;
 import com.meridian.dashboard.dashboard.adapter.DolarApiAdapter;
 import com.meridian.dashboard.dashboard.adapter.FinnhubAdapter;
-import com.meridian.dashboard.dashboard.adapter.FrankfurterAdapter;
-import com.meridian.dashboard.dashboard.adapter.NewsAdapter;
-import com.meridian.dashboard.dashboard.cache.DashboardCacheService;
 import com.meridian.dashboard.dashboard.cache.DashboardCacheService.CacheResult;
-import com.meridian.dashboard.dashboard.dto.DashboardResponse;
+import com.meridian.dashboard.dashboard.cache.DashboardCacheService;
+import com.meridian.dashboard.dashboard.dto.CryptoQuote;
+import com.meridian.dashboard.dashboard.dto.CryptoSection;
+import com.meridian.dashboard.dashboard.dto.EquitiesSection;
+import com.meridian.dashboard.dashboard.dto.EquityQuote;
+import com.meridian.dashboard.dashboard.dto.FxSection;
+import com.meridian.dashboard.dashboard.dto.RateQuote;
+import com.meridian.dashboard.dashboard.dto.SummaryResponse;
 
 import lombok.RequiredArgsConstructor;
 
@@ -24,45 +30,45 @@ import lombok.RequiredArgsConstructor;
  * y aísla los fallos por sección para no cortar la respuesta HTTP.
  *
  * <p>Un fallo de un adaptador no propaga excepción al controller: la sección queda en
- * {@code degraded} y se sirve la última respuesta buena de la caché o una lista vacía.</p>
+ * {@code degraded} y se sirve la última respuesta buena de la caché o un mapa vacío.</p>
  */
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
 
     private final DolarApiAdapter dolarAdapter;
-    private final FrankfurterAdapter fxAdapter;
     private final CoinGeckoAdapter cryptoAdapter;
     private final FinnhubAdapter equityAdapter;
-    private final NewsAdapter newsAdapter;
     private final DashboardCacheService cache;
     private final ExecutorService dashboardExecutor;
 
     /**
-     * Construye la respuesta agregada de todas las secciones.
+     * Construye el resumen de dólar ARS, criptomonedas y bolsa.
      *
-     * @return datos disponibles y los nombres de las secciones sin datos frescos;
-     *         {@code cryptoHistory} se informa una sola vez aunque fallen BTC y ETH
+     * @return datos disponibles y nombres públicos de las secciones sin datos frescos
      */
-    public DashboardResponse getDashboard() {
+    public SummaryResponse getSummary() {
         var dolar = fetch("dolar", dolarAdapter::fetchDolar);
-        var fx = fetch("fx", fxAdapter::fetchFx);
         var crypto = fetch("crypto", cryptoAdapter::fetchPrices);
-        var bitcoin = fetch("cryptoHistory:bitcoin", () -> cryptoAdapter.fetchHistory("bitcoin"));
-        var ethereum = fetch("cryptoHistory:ethereum", () -> cryptoAdapter.fetchHistory("ethereum"));
         var equities = fetch("equities", equityAdapter::fetchQuotes);
-        var candles = fetch("equityCandles", equityAdapter::fetchCandles);
-        var news = fetch("news", newsAdapter::fetchNews);
-        CompletableFuture.allOf(dolar, fx, crypto, bitcoin, ethereum, equities, candles, news).join();
+        CompletableFuture.allOf(dolar, crypto, equities).join();
 
         List<String> degraded = Stream.of(
-                section("dolar", dolar), section("fx", fx), section("crypto", crypto),
-                section("cryptoHistory", bitcoin), section("cryptoHistory", ethereum),
-                section("equities", equities), section("equityCandles", candles), section("news", news))
+                section("fx", dolar), section("crypto", crypto), section("equities", equities))
                 .flatMap(List::stream).distinct().toList();
-        return new DashboardResponse(dolar.join().values(), fx.join().values(), crypto.join().values(),
-                Stream.concat(bitcoin.join().values().stream(), ethereum.join().values().stream()).toList(),
-                equities.join().values(), candles.join().values(), news.join().values(), degraded);
+        return new SummaryResponse("Meridian", Instant.now(),
+                new FxSection(dolar.join().values().stream()
+                        .filter(quote -> List.of("oficial", "blue").contains(quote.tipo()))
+                        .collect(Collectors.toMap(quote -> "usd_" + quote.tipo(),
+                                quote -> new RateQuote(quote.compra(), quote.venta())))),
+                new CryptoSection(crypto.join().values().stream()
+                        .filter(quote -> List.of("bitcoin", "ethereum").contains(quote.id()))
+                        .collect(Collectors.toMap(quote -> quote.id(),
+                                quote -> new CryptoQuote(quote.priceUsd(), quote.change24h())))),
+                new EquitiesSection(equities.join().values().stream()
+                        .filter(quote -> List.of("AAPL", "MSFT", "SPY").contains(quote.ticker()))
+                        .collect(Collectors.toMap(quote -> quote.ticker(),
+                                quote -> new EquityQuote(quote.price(), quote.currency())))), degraded);
     }
 
     private <T> CompletableFuture<CacheResult<T>> fetch(String key, Supplier<List<T>> supplier) {
