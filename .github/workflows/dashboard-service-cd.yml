@@ -7,4 +7,4 @@ jobs:
   instructions:
     runs-on: ubuntu-latest
     steps:
-      - run: echo 'Configurar registry, cluster, credenciales y environment protegido antes de habilitar Helm deploy. Ver delivery/devops-local.md.'
+      - run: echo 'Configurar registry, cluster, credenciales y environment protegido antes de habilitar Helm deploy. Aprovisionar jwt.existingSecret con JWT_SECRET obligatorio (mismo valor que auth-service, mínimo 32 bytes) desde el gestor de secretos del entorno. Ver delivery/devops-local.md.'

@@ -1,4 +1,7 @@
 replicaCount: 2
+jwt:
+  # Secret obligatorio con JWT_SECRET: mismo valor que auth-service, mínimo 32 bytes.
+  existingSecret: auth-jwt
 config:
   useMock: false
 # Configurar image.repository y un tag inmutable publicado antes de desplegar.

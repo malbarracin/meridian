@@ -6,6 +6,10 @@ image:
 imagePullSecrets: []
 service:
   port: 8081
+jwt:
+  # Secret obligatorio con JWT_SECRET (mínimo 32 bytes), mismo valor que auth-service.
+  # Compartir el Secret auth-jwt en el mismo namespace; no guardar la clave en Git.
+  existingSecret: auth-jwt
 config:
   cacheTtlSeconds: 60
   useMock: false

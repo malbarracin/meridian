@@ -43,6 +43,11 @@ spec:
             - configMapRef:
                 name: {{ include "dashboard.name" . }}
           env:
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "Set jwt.existingSecret to the shared auth-service Secret containing JWT_SECRET" .Values.jwt.existingSecret | quote }}
+                  key: JWT_SECRET
             - name: FINNHUB_API_KEY
               valueFrom:
                 secretKeyRef:

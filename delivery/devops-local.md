@@ -1,6 +1,6 @@
 # Operación local de auth-service
 
-## Dashboard-service — TASK-48
+## Dashboard-service — TASK-62 (contrato H3)
 
 Servicio independiente sin base de datos, Java 21 y puerto 8081, según
 `specs/dashboard/arquitectura-apis-publicas.md`. Requiere Docker Compose v2 para
@@ -10,11 +10,16 @@ Los siguientes comandos PowerShell parten de la raíz del repositorio.
 ```powershell
 Set-Location services/dashboard-service
 Copy-Item .env.example .env
+# Completar JWT_SECRET con el mismo valor que auth-service (mínimo 32 bytes).
 docker compose config --quiet
 docker compose up --build -d --wait
 docker compose ps
 Invoke-RestMethod http://localhost:8081/actuator/health
-Invoke-RestMethod http://localhost:8081/api/v1/dashboard
+# Obtener accessToken mediante login en auth-service y asignarlo a $accessToken.
+$headers = @{ Authorization = "Bearer $accessToken" }
+Invoke-RestMethod http://localhost:8081/api/v1/dashboard/summary -Headers $headers
+Invoke-RestMethod 'http://localhost:8081/api/v1/dashboard/charts?asset=BTC&range=7d' -Headers $headers
+Invoke-RestMethod 'http://localhost:8081/api/v1/dashboard/news?topic=ai-tech&limit=8' -Headers $headers
 docker compose logs --tail 100 dashboard-service
 docker compose down
 .\mvnw.cmd -q -B clean verify
@@ -25,6 +30,11 @@ Set-Location ../..
 La salud debe devolver `status: UP`. Para una demo offline, poner
 `DASHBOARD_USE_MOCK=true` en `.env` antes de levantar Compose; el dashboard debe
 devolver fixtures y `degraded` vacío. Sin modo mock se consultan proveedores externos.
+`JWT_SECRET` es obligatoria en todos los perfiles, incluso con mocks: mínimo 32 bytes,
+misma clave HMAC-SHA256 que usa auth-service para emitir tokens. Completar ambas copias
+locales de `.env` con el mismo valor, sin versionarlas. Compose rechaza valores vacíos.
+`/actuator/health` sigue público; los tres endpoints requieren `Authorization: Bearer`.
+El antiguo `GET /api/v1/dashboard` fue retirado.
 Variables opcionales de `.env.example`:
 
 | Variable | Default | Uso |
@@ -41,7 +51,8 @@ JDK 21 alpine, wrapper, extracción por capas con `jarmode=tools` de Spring Boot
 JRE 21 alpine, UID/GID 10001, healthcheck y flags JVM para contenedores.
 CI ejecuta los tests antes de construir la imagen; el build Docker omite tests.
 Los perfiles dev/docker/prod heredan la configuración base sin agregar persistencia;
-el perfil test activa mocks. No se necesitan credenciales para arrancar.
+el perfil test activa mocks. JWT_SECRET es obligatoria para arrancar fuera de los tests,
+que usan una clave aislada definida en `src/test/resources/application.yml`.
 
 ### CI y publicación de dashboard
 
@@ -54,6 +65,9 @@ No publica la imagen: el registry no está configurado. Para habilitar publicaci
 configurar autenticación y `packages: write` con GITHUB_TOKEN o un token de registry
 en GitHub Secrets. `dashboard-service-cd.yml` es una plantilla manual informativa.
 El despliegue requiere registry, cluster, credenciales y environment protegido acordados.
+Los builds Maven y Docker no necesitan el secreto productivo. Para cualquier ejecución
+integrada en CI, inyectar una única `JWT_SECRET` del gestor de secretos del entorno en
+ambos servicios. Nunca imprimirla ni incorporarla a la imagen o a values versionados.
 
 ### Helm de dashboard
 
@@ -61,6 +75,8 @@ El despliegue requiere registry, cluster, credenciales y environment protegido a
 helm lint helm/dashboard-service
 helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-dev.yaml
 helm template dashboard helm/dashboard-service -f helm/dashboard-service/values-prod.yaml
+# Aprovisionar previamente auth-jwt con JWT_SECRET en el namespace dev,
+# con el mismo valor que auth-service (mediante el gestor de secretos del entorno).
 docker build -t dashboard-service:local services/dashboard-service
 kind load docker-image dashboard-service:local
 helm upgrade --install dashboard helm/dashboard-service -f helm/dashboard-service/values-dev.yaml -n dev --create-namespace
@@ -75,7 +91,14 @@ usan perfil Spring prod, probes startup/readiness/liveness en `/actuator/health`
 ClusterIP, usuario no-root y recursos configurables (100m/256Mi solicitados,
 1 CPU/512Mi de límite). No se realizó despliegue real.
 
-Por defecto el chart crea un Secret con claves vacías. Se recomienda aprovisionar
+`jwt.existingSecret` referencia por defecto `auth-jwt`, siguiendo el patrón del chart
+auth-service. Debe existir en el mismo namespace y contener `JWT_SECRET` (mínimo
+32 bytes) con el mismo valor que auth-service. La referencia es obligatoria y no
+opcional en Kubernetes; un nombre vacío falla al renderizar. El chart no crea ni
+duplica la clave JWT. Si ambos servicios usan namespaces diferentes, sincronizar
+el mismo valor mediante el gestor de secretos. Tras rotarlo, reiniciar ambos servicios.
+
+Por defecto el chart crea un Secret con claves opcionales vacías. Se recomienda aprovisionar
 un Secret externo con `FINNHUB_API_KEY` y `NEWS_API_KEY` y referenciarlo mediante
 `secrets.existingSecret`. Las claves son opcionales y conservan el fallback sin Secret.
 La alternativa `secrets.finnhubApiKey`/`secrets.newsApiKey` solo debe proporcionarse
@@ -85,19 +108,26 @@ externo, reiniciar el Deployment con `kubectl rollout restart`.
 
 ### Verificación dashboard y pendientes
 
-- Compose `docker compose --env-file .env.example config --quiet`: OK.
+- Compose `docker compose --env-file .env.example config --quiet`: OK con una clave
+  descartable inyectada por entorno; rechaza JWT_SECRET vacío como se esperaba.
 - Sintaxis YAML de workflows, Compose, perfiles, Chart y values: OK con SnakeYAML
   2.4 local, con rechazo de claves duplicadas. No sustituye el renderizado Helm.
 - `.\mvnw.cmd -q dependency:tree -Dverbose` desde el módulo: código 0.
-- `.\mvnw.cmd -q -B clean verify` desde el módulo: código 0, 74 tests y gate
-  JaCoCo 80% aprobado. Extracción del JAR por capas con `jarmode=tools`: OK.
+- `.\mvnw.cmd -q -B clean verify` desde el módulo: código 0, 123 tests sin fallos
+  ni errores; JaCoCo 569/576 líneas (98,78%), gate 80% aprobado sin cambios.
+  La prueba `JwtHttpIntegrationTest` confirma `/actuator/health` público sin JWT.
 - Pendiente de verificar: Docker devuelve permiso denegado al daemon
-  `dockerDesktopLinuxEngine`. Desde `services/dashboard-service`, ejecutar
-  `docker compose build`, `docker compose up -d --wait`, `docker compose ps`,
+  `dockerDesktopLinuxEngine`; `docker compose build` con clave descartable también
+  falla por acceso denegado a `.docker/buildx/.lock`. Desde `services/dashboard-service`,
+  completar JWT_SECRET en `.env` y ejecutar `docker compose build`,
+  `docker compose up --build -d --wait`, `docker compose ps`,
   `Invoke-RestMethod http://localhost:8081/actuator/health` y `docker compose down`.
 - Pendiente de verificar: Helm no está instalado. Ejecutar `helm lint helm/dashboard-service`
   y los dos comandos `helm template` anteriores. No se instaló ni descargó Helm.
 - Pendiente de verificar: ejecución remota de GitHub Actions y despliegue en cluster.
+- `.m2-local` no está trackeado: `git ls-files '*m2-local*'` y
+  `git ls-tree -r HEAD -- services/dashboard-service` filtrado por `m2-local`
+  no devuelven entradas. `.gitignore` y `.dockerignore` lo excluyen; sin limpieza adicional.
 
 ## Auth-service — operación existente
 
