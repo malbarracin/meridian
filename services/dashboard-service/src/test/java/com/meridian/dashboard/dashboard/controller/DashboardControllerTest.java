@@ -53,7 +53,9 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.crypto.ethereum.priceUsd").value(3500))
                 .andExpect(jsonPath("$.crypto.ethereum.change24hPct").value(-1.2))
                 .andExpect(jsonPath("$.equities.AAPL.price").value(175))
+                .andExpect(jsonPath("$.equities.AAPL.currency").value("USD"))
                 .andExpect(jsonPath("$.equities.MSFT.price").value(415))
+                .andExpect(jsonPath("$.equities.MSFT.currency").value("USD"))
                 .andExpect(jsonPath("$.equities.SPY.price").value(450))
                 .andExpect(jsonPath("$.equities.SPY.currency").value("USD"))
                 .andExpect(jsonPath("$.activeUsers").doesNotExist())
@@ -80,6 +82,12 @@ class DashboardControllerTest {
     @Test
     @DisplayName("Rechaza JWT ausente, inválido o expirado sin datos de mercado")
     void rechazaCredenciales() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/summary"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.fx").doesNotExist())
+                .andExpect(jsonPath("$.crypto").doesNotExist())
+                .andExpect(jsonPath("$.equities").doesNotExist());
         for (String authorization : List.of("", "Bearer invalid", "Bearer "
                 + com.meridian.dashboard.security.JwtValidatorTest.token(
                         com.meridian.dashboard.security.JwtValidatorTest.SECRET,

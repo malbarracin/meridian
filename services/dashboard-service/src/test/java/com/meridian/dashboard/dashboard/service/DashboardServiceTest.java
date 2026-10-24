@@ -59,10 +59,16 @@ class DashboardServiceTest {
         var response = service.getSummary();
         assertThat(response.degraded()).isEmpty();
         assertThat(response.fx()).isEqualTo(DashboardMockFixtures.getSummaryFx());
+        assertThat(response.fx().quotes()).containsOnlyKeys("usd_oficial", "usd_blue");
         assertThat(response.brand()).isEqualTo("Meridian");
+        assertThat(response.brand()).doesNotContainIgnoringCase("Soma").isNotEqualTo("Ops Deck");
         assertThat(response.generatedAt()).isNotNull();
         assertThat(response.crypto()).isEqualTo(DashboardMockFixtures.getSummaryCrypto());
+        assertThat(response.crypto().values()).containsOnlyKeys("bitcoin", "ethereum");
+        assertThat(response.crypto().values().get("bitcoin").change24hPct())
+                .isEqualByComparingTo("2.5");
         assertThat(response.equities()).isEqualTo(DashboardMockFixtures.getSummaryEquities());
+        assertThat(response.equities().values()).containsOnlyKeys("AAPL", "MSFT", "SPY");
         assertThat(service.getSummary().fx()).isEqualTo(response.fx());
         verify(dolar).fetchDolar();
         org.mockito.Mockito.verifyNoInteractions(fx, news);

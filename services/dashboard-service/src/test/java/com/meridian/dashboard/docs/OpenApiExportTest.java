@@ -68,5 +68,10 @@ class OpenApiExportTest {
                 .path("application/json").path("examples").has("errorInterno")).isTrue();
         assertThat(specification.path("components").path("examples").has("SummaryMock")).isTrue();
         assertThat(specification.path("components").path("schemas").has("SummaryResponse")).isTrue();
+        assertThat(json).doesNotContain("DashboardResponse");
+        assertThat(json).doesNotContainIgnoringCase("Soma");
+        assertThat(json).doesNotContain("Ops Deck");
+        assertThat(json).doesNotContain("activeUsers");
+        assertThat(json).doesNotContain("sessionsToday");
     }
 }
